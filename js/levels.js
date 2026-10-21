@@ -50,7 +50,7 @@
       behavior: 'swoop'
     },
     boss_butt: {
-      sprite: 'boss_butt', hp: 400, speed: 40, score: 5000, w: 96, h: 80,
+      sprite: 'boss_butt', hp: 240, speed: 40, score: 5000, w: 96, h: 80,
       behavior: 'boss', hairy: true
     }
   };
@@ -111,7 +111,7 @@
       ],
       boss: {
         type: 'boss_butt',
-        hp: 400,
+        hp: 240,
         phases: [
           { hpAbove: 0.6, attacks: ['spread'],                    interval: 2.2 },
           { hpAbove: 0.3, attacks: ['spread', 'spawn'],           interval: 1.8 },
@@ -177,7 +177,7 @@
       ],
       boss: {
         type: 'boss_butt',
-        hp: 650,
+        hp: 380,
         phases: [
           { hpAbove: 0.7, attacks: ['spread', 'spawn'],           interval: 2.0 },
           { hpAbove: 0.4, attacks: ['spread', 'spawn', 'swallow'], interval: 1.6 },
@@ -264,7 +264,7 @@
       ],
       boss: {
         type: 'boss_butt',
-        hp: 900,
+        hp: 520,
         phases: [
           { hpAbove: 0.75, attacks: ['spread', 'spawn'],            interval: 1.8 },
           { hpAbove: 0.5,  attacks: ['spread', 'spawn', 'swallow'],  interval: 1.5 },
