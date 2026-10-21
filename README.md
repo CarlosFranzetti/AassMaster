@@ -50,54 +50,6 @@ Flying close past enemy shots without touching them (grazing) adds bonus points.
 have more at 35 s and 40 s. When you run out of lives you can continue from the last
 checkpoint you passed. You get 3 continues per run. Power-ups reset, your score is kept.
 
-## How to run
-
-Easiest: open `index.html` in a browser.
-
-For proper audio autoplay behaviour, serve the folder over HTTP instead:
-
-```sh
-cd AassMaster
-python3 -m http.server
-```
-
-Then visit http://localhost:8000 in your browser.
-
-No install, no build step, no npm.
-
-To check the level data, open the browser console and run `Levels.validate()`.
-It returns `{errors, warnings}`. Errors mean a broken stage. Warnings are design notes.
-
-## Documentation
-
-| File | For |
-|------|-----|
-| `CLAUDE.md` | Rules and layout for anyone changing the code, human or agent |
-| `prd.md` | What the game is for, requirements and their status |
-| `memory.md` | What was decided, why, and what has and has not been verified |
-| `future.md` | Backlog, ordered by value |
-| `CHANGELOG.md` | v1 and v2 changes |
-| `CONTRACT.md` | The module contract (v2) |
-| `docs/architecture.md` | How the modules fit together and the main loop |
-| `docs/level-design.md` | Enemies, stages, waves, bosses, loop rules and the validator |
-| `docs/art-and-audio.md` | Sprite, theme, sound and music systems |
-| `docs/testing.md` | How to check a change |
-| `team/` | The design discussion between the four roles |
-
-## File layout
-
-```
-index.html        page shell, loads the scripts in order
-js/
-  sprites.js      pixel art, every sprite drawn procedurally from character grids
-  sfx.js          sound effects and chiptune music, synthesised with Web Audio
-  levels.js       stage data: enemy catalogue, wave scripts, boss and mid-boss phases,
-                  loop modifiers, power-up drops, checkpoints and validate()
-  render.js       backdrop, raster effects, HUD, title and overlays
-  game.js         the engine: loop, input, collision, bosses, scoring, checkpoints
-tests/smoke.js    headless play-through: no page errors, screenshots
-```
-
 ## Everything is generated
 
 There are no image, audio or font files in this project. All the pixel art is
