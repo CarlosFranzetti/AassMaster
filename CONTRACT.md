@@ -1,12 +1,32 @@
-# aasssMaster — module contract (READ THIS FIRST)
+# aasssMaster — module contract v2 (READ THIS FIRST)
 
-Horizontal pixel-art shmup (R-Type style). You fly left→right, shooting hairy pixel butt-aliens
-("aasssMonsters") before they swallow you with their hairy mouth (butt). Landscape, touchscreen-first.
+v1 is tagged `v1`. v2 was designed by the four roles in three discussion rounds; the binding spec is:
+  1. team/DIRECTOR-RULINGS.md  (R1-R12: overrides everything below and in rounds 1-2)
+  2. team/round3-PIXEL.md, team/round3-SOUND.md, team/round3-MECH.md, team/round3-LEVELS.md  (each role's COMMITTED API)
+  3. The FINAL CORRECTIONS section below (fixes the last mismatches between round-3 files; wins over the round-3 files)
+  4. This file's v1 sections (kept for anything the above does not mention)
 
-Plain browser JS, NO build step, NO npm, NO modules — every file attaches ONE global and is loaded via
-<script> tags in index.html in this order:  sprites.js → sfx.js → levels.js → game.js
-Each file must be self-contained and must not read any other file's internals except via the API below.
+Plain browser JS, NO build step, NO modules. Load order (index.html): sprites.js → sfx.js → levels.js → render.js → game.js.
+Internal resolution W=384, H=216, FLOOR=196, CEIL=20. Flat terrain only (R1).
 
+## FINAL CORRECTIONS (binding)
+C1. Boss / mid-boss phases use LEVELS' shape: `phases:[{hpAbove, attacks:[ id | {id, ...overrides} ], interval}]`.
+    MECH keeps its own default parameters per attack id (fan, spiral, lunge, spawn, rain) and merges per-item overrides
+    (`n, arms, dur, type, speed, gapRotate, every, tele, count`) over them. `boss.attacks` dictionary is OPTIONAL: if present
+    it overrides the defaults for that boss. MECH also accepts `seq` as an alias of `attacks` for safety. Unknown id → console.warn once.
+C2. Charge tiers are frames after the PRESS (R6 literal): 21 = orb + play('charge'); 30 = tier 1; 60 = tier 2; 96 = tier 3.
+    MECH's "press+51/81/117" reading is wrong and is replaced by this. SOUND's +0.15/+0.65/+1.25 s after play('charge') is right.
+C3. `butt_armored`: LEVELS authors `behavior:'armored', armor:true`; MECH registers 'armored' (and treats the name as armored anyway).
+C4. midboss_butt is 56x48 everywhere. LEVELS keys == sprite names for every enemy and boss.
+C5. `getStage(raw).boss.hp` and `.midboss.hp` are returned ALREADY loop-scaled by Levels (mods.boss applied inside getStage);
+    MECH applies `mods.hp/count/speed/fire` to regular enemies only. All speeds are px/s (`pxps`); MECH drops the >8 heuristic
+    but warns on values < 20 in attack params.
+C6. SOUND does not provide charge_ready / charge_tier / rock_thud / bullet_ping / bomb_drop; MECH must not call them.
+C7. The engine must boot with zero console errors when every module is present, and must not crash if an IF-TIME sprite/sound/track is missing.
+C8. Every role ships a self-check: PIXEL (size/frame table assertion), SOUND (fake-AudioContext smoke), LEVELS (`Levels.validate()` → {errors:[], warnings}),
+    MECH (Playwright headless run reaching the stage-2 mid-boss and the stage-1 boss kill with no page errors).
+
+## v1 sections (unchanged unless superseded above)
 ## Internal resolution
 Canvas logical size: W = 384, H = 216 (16:9). Game scales it to the screen with `image-rendering: pixelated`.
 All sprites are drawn at 1:1 logical pixels (no sub-pixel; use Math.round on draw positions).
