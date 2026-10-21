@@ -314,18 +314,21 @@
   ]], { v: '#b89cff' });
 
   /* hostile projectiles */
-  (function () {
-    var fr = [];
-    for (var f = 0; f < 2; f++) {
-      var g = mk(6, 6);
-      ell(g, 3, 3, 3, 3, 'K');
-      ell(g, 3, 3, 2.35, 2.35, function (x, y, u, v) { var l = -u * 0.6 - v * 0.8; return f ? (l > 0.2 ? 'Y' : 'o') : (l > 0.3 ? 'o' : 'r'); });
-      ell(g, 3, 3, 1.1, 1.1, f ? 'Y' : 'W');
-      put(g, f ? 3 : 2, f ? 3 : 2, 'W');
-      fr.push(g);
-    }
-    def('enemy_bullet', 6, 6, fr);
-  })();
+  def('enemy_bullet', 6, 6, [[
+    '.KKKK.',
+    'KrYYrK',
+    'KYWWYK',
+    'KYWWYK',
+    'KrYYrK',
+    '.KKKK.'
+  ], [
+    '.KKKK.',
+    'KoWWoK',
+    'KWYYWK',
+    'KWYYWK',
+    'KoWWoK',
+    '.KKKK.'
+  ]]);
 
   (function () {
     var fr = [];
@@ -506,7 +509,7 @@
     if (o.eyes) {
       C.forEach(function (c, ci) {
         var ex = c.x + (ci ? -0.6 : 0.6), ey = c.y - ry * 0.28, inward = ci ? -1 : 1;
-        if (o.wink === ci + 1) {                            // winking: a happy closed-eye arc
+        if (o.wink === ci + 1 || o.wink === 3) {                            // winking: a happy closed-eye arc
           line(g, ex - 2.6, ey + 0.4, ex, ey - 0.8, 'K'); line(g, ex, ey - 0.8, ex + 2.6, ey + 0.4, 'K');
           line(g, ex - 2.6, ey + 1.4, ex, ey, 'K'); line(g, ex, ey, ex + 2.6, ey + 1.4, 'K');
           return;
@@ -705,29 +708,117 @@
     def('alien_squid', 20, 24, fr, { a: '#a8fff0', b: '#22c0a4', c: '#0e7a7c' });
   })();
 
-  /* ================================================================= BOSS == */
-  function bossFrame(f, dmg) {
-    var open = [0, 0.35, 0.7, 1][f];
-    var lDy = [0, -1, 0, -2][f], rDy = [0, 0, -1, -2][f];
+  /* ================================================================= BOSS ==
+   * Three 96x80 bosses share one body generator, 7 poses each (+ a bruised _dmg set):
+   * 0 closed  1 part-open  2 open  3 swallow (wide open + tongue)  4 wind-up (clenched, veins, sweat)
+   * 5 blast (mouth wide, cheeks flared)  6 flinch (squeezed, impact stars).
+   * Mouth centre stays at (48,41) in every pose so meta().mouth lines up with the art.
+   * Built lazily on first use (Sprites.prewarm to do it during the stage intro). */
+  var BOSS_POSE = [
+    { open: 0,    lDy: 0,  rDy: 0,  sep: 12,   tongueOut: 0 },
+    { open: 0.35, lDy: -1, rDy: 0,  sep: 13.05 },
+    { open: 0.7,  lDy: 0,  rDy: -1, sep: 14.1 },
+    { open: 1,    lDy: -2, rDy: -2, sep: 15,   tongueOut: 1 },
+    { open: 0,    lDy: 1,  rDy: 1,  sep: 10.4 },                     // wind-up
+    { open: 0.9,  lDy: -2, rDy: -2, sep: 15.6, flare: 1 },           // blast
+    { open: 0,    lDy: 2,  rDy: 2,  sep: 8.6,  flinch: 1 }           // flinch
+  ];
+  function walk(g, x, y, steps, c, R, set) {                          // jagged vein / crack on flesh
+    var dx = R() < 0.5 ? -1 : 1, dy = R() < 0.5 ? -1 : 1, i;
+    for (i = 0; i < steps; i++) {
+      if (inSet(at(g, x, y), set)) put(g, x, y, c);
+      x += R() < 0.7 ? dx : 0; y += (R() < 0.6 ? dy : 0) + (R() < 0.15 ? -dy : 0);
+    }
+  }
+  function bossPose(f, dmg, V) {
+    var P = BOSS_POSE[f], open = P.open;
     var mrx = 3 + open * 10, mry = 13 + open * 9;
-    return butt({
-      w: 96, h: 80, seed: 11, cx: 48, cw: 3, cy: 41, rx: 29, ry: 32, sep: 12 + open * 3,
-      lDy: lDy, rDy: rDy, hair: 0.9, hairLong: 0.7, hairMax: 2, fur: 230, tuft: 10, tuftLen: 6,
-      spot: 0.05, outline2: true, dither: true, dmg: dmg,
+    var g = butt({
+      w: 96, h: 80, seed: 11, cx: 48, cw: 3, cy: 41, rx: P.flinch ? 28 : 29, ry: P.flinch ? 30 : 32, sep: P.sep,
+      lDy: P.lDy, rDy: P.rDy, hair: 0.9, hairLong: 0.7, hairMax: 2, fur: 230, tuft: 10, tuftLen: 6,
+      spot: 0.05, outline2: true, dither: true, dmg: dmg, dmgSeed: V.dmgSeed,
       mouth: {
         dy: 0, rx: mrx, ry: mry, lip: 3,
         teeth: { n: 12, len: 6 + Math.round(open * 4), w: 5, a0: 0.15 },
         tongue: open > 0.3 ? { rx: mrx * 0.85, ry: mry * 0.5, dy: 0.5 } : null,
-        tongueOut: f === 3 ? { len: 7, w: 7.5 } : null,
+        tongueOut: P.tongueOut ? { len: 7, w: 7.5 } : null,
         lipHair: 34, lipHairLen: 5
       }
     });
+    var FL = 'pLldDuU', R = rng(500 + f);
+    if (f === 4) {                                                    // wind-up: bulging veins + sweat
+      var vs = [[24, 22], [30, 50], [20, 38], [72, 24], [66, 52], [76, 40], [34, 62], [62, 64], [28, 30], [70, 34], [40, 20], [58, 22]], i;
+      for (i = 0; i < vs.length; i++) { walk(g, vs[i][0], vs[i][1], 16, 'r', R, FL); walk(g, vs[i][0] + 1, vs[i][1], 10, 'R', R, FL); }
+      [[14, 20], [82, 24], [18, 58]].forEach(function (d) {
+        put(g, d[0], d[1], 'e'); put(g, d[0], d[1] + 1, 'e'); put(g, d[0] - 1, d[1] + 1, 'q'); put(g, d[0] + 1, d[1] + 1, 'q'); put(g, d[0], d[1] + 2, 'q');
+      });
+    }
+    if (f === 6) {                                                    // flinch: impact stars + ow-lines
+      [[24, 30], [74, 50], [30, 58]].forEach(function (c) {
+        line(g, c[0] - 4, c[1], c[0] + 4, c[1], 'W'); line(g, c[0], c[1] - 4, c[0], c[1] + 4, 'W');
+        line(g, c[0] - 3, c[1] - 3, c[0] + 3, c[1] + 3, 'Y'); line(g, c[0] - 3, c[1] + 3, c[0] + 3, c[1] - 3, 'Y');
+      });
+      line(g, 8, 36, 14, 38, 'K'); line(g, 88, 34, 82, 36, 'K'); line(g, 10, 46, 16, 45, 'K'); line(g, 86, 46, 80, 45, 'K');
+    }
+    if (V.deco) V.deco(g, f);
+    return g;
   }
-  (function () {
-    var fr = [0, 1, 2, 3].map(function (f) { return bossFrame(f, false); });
-    def('boss_butt', 96, 80, fr);
-    def('boss_butt_dmg', 96, 80, [bossFrame(2, true)], { u: '#8a4aa8', U: '#52207a' });
-  })();
+  function bossFrames(V, dmg) { var o = [], f; for (f = 0; f < 7; f++) o.push(bossPose(f, dmg, V)); return o; }
+
+  function hornAt(g, bx, by, side, h) {                               // curved bone horn, base inside the head
+    var t, pts = [];
+    for (t = 0; t <= 1.001; t += 0.05) pts.push([bx + side * (t * t * 9 + t * 2), by - t * h]);
+    var tmp = mk(96, 80);
+    pts.forEach(function (p, k) {
+      var r = 3.2 * (1 - k / pts.length) + 0.6;
+      ell(tmp, p[0], p[1], r, r, function (x, y, u, v) { return (-u * 0.5 - v * 0.5) > 0.1 ? 'w' : 's'; });
+    });
+    outline(tmp, 'K', false);
+    paste(g, tmp, 0, 0);
+  }
+  function decoCrack(g, f) {
+    hornAt(g, 31, 16, -1, 17); hornAt(g, 65, 16, 1, 17);
+    var y, x, c;                                                       // white terry-cloth sweat-band, red edges
+    for (y = 22; y <= 28; y++) for (x = 6; x < 90; x++) {
+      c = at(g, x, y);
+      if ('pLldDuU'.indexOf(c) >= 0) put(g, x, y, (y === 22 || y === 28) ? 'R' : ((y === 23 || y === 27) ? 'r' : ((x + y) % 6 === 0 ? 'q' : 'W')));
+    }
+    line(g, 12, 25, 6, 33, 'r'); line(g, 12, 26, 9, 35, 'R'); line(g, 12, 25, 4, 29, 'r');   // knot tails
+    ell(g, 12, 25.5, 2.6, 2.6, 'R'); put(g, 11, 24, 'r');
+  }
+  function decoGod(g, f) {
+    var i, x, y, a;
+    for (a = 0; a < 6.283; a += 0.015) {                              // halo: golden ring BEHIND the head (only on empty cells)
+      x = 48 + Math.cos(a) * 40; y = 9 + Math.sin(a) * 6.5;
+      for (var t = 0; t < 2; t++) if (at(g, x, y + t) === '.') put(g, x, y + t, t ? 'o' : 'Y');
+    }
+    var spikes = [37, 42.5, 48, 53.5, 59];
+    for (x = 36; x <= 60; x++) for (y = 6; y <= 9; y++) put(g, x, y, y === 6 ? 'Y' : (y === 9 ? 'o' : 'y'));    // crown band
+    spikes.forEach(function (px, k) {
+      var hh = k % 2 ? 4 : 6, j, w;
+      for (j = 0; j < hh; j++) { w = Math.round(1.6 * (1 - j / hh)); for (var q = -w; q <= w; q++) put(g, px + q, 5 - j, j === hh - 1 ? 'W' : (q > 0 ? 'o' : 'Y')); }
+    });
+    put(g, 48, 7, 'r'); put(g, 48, 8, 'r'); put(g, 41, 8, 'c'); put(g, 55, 8, 'c');                 // gems
+    var tmp = mk(96, 80);
+    for (y = 0; y <= 10; y++) for (x = 34; x <= 62; x++) if ('YyoWrc'.indexOf(at(g, x, y)) >= 0) tmp[y][x] = 'x';
+    for (y = 0; y <= 11; y++) for (x = 33; x <= 63; x++) if (tmp[y][x] === '.' && (tmp[y][x - 1] === 'x' || tmp[y][x + 1] === 'x' || (y > 0 && tmp[y - 1][x] === 'x') || tmp[y + 1][x] === 'x') && 'YyoWrc'.indexOf(at(g, x, y)) < 0) put(g, x, y, 'K');
+  }
+  var BOSS_V = [
+    { name: 'boss_butt', deco: null, dmgSeed: 91, pal: {}, dpal: { u: '#8a4aa8', U: '#52207a' } },
+    { name: 'boss_crack', deco: decoCrack, dmgSeed: 92,
+      pal: { p: '#e8603c', L: '#ffc890', l: '#ff9262', d: '#aa2e28', D: '#681a22', h: '#2a0c10', H: '#8a2a1c', m: '#3a0610', t: '#ffb02a', T: '#c06a10', q: '#ffe08a', R: '#7a1018' },
+      dpal: { u: '#7a2a58', U: '#44123c' } },
+    { name: 'boss_god', deco: decoGod, dmgSeed: 93,
+      pal: { p: '#74cc62', L: '#eaffbc', l: '#b4f488', d: '#3a8a40', D: '#1c5232', h: '#6a5008', H: '#f0c838', m: '#0e3a22', M: '#06200f', w: '#fff6c8', s: '#d8c070', c: '#5fe8ff' },
+      dpal: { u: '#5a7aa8', U: '#2c3a78' } }
+  ];
+  BOSS_V.forEach(function (V) {
+    var pal = V.pal, dp = {}, k;
+    for (k in pal) dp[k] = pal[k];
+    for (k in V.dpal) dp[k] = V.dpal[k];
+    lazy(V.name, 96, 80, 7, function () { return bossFrames(V, false); }, pal);
+    lazy(V.name + '_dmg', 96, 80, 7, function () { return bossFrames(V, true); }, dp);
+  });
 
   /* ============================================================ EXPLOSIONS == */
   function boomFrame(S, R0, bands, hole, drop, seed, f) {
@@ -771,7 +862,10 @@
   (function () {
     var LET = {
       P: ['XXX', 'X.X', 'XXX', 'X..', 'X..'], S: ['XXX', 'X..', 'XXX', '..X', 'XXX'],
-      B: ['XX.', 'X.X', 'XX.', 'X.X', 'XX.'], O: ['XXX', 'X.X', 'X.X', 'X.X', 'XXX']
+      B: ['XX.', 'X.X', 'XX.', 'X.X', 'XX.'], O: ['XXX', 'X.X', 'X.X', 'X.X', 'XXX'],
+      // new icons (v2): spread fan, laser bar, wave "~", force pod ring
+      '3': ['...XX', '.XX..', 'XXXXX', '.XX..', '...XX'], L: ['.X....', '.XXXXX', 'XXXXXX', '.XXXXX', '.X....'],
+      '~': ['......', '.XX..X', 'X..XX.', '......'], F: ['.XXX.', 'X...X', 'X.X.X', 'X...X', '.XXX.']
     };
     function cap(letter, pal, f) {
       var g = mk(12, 12), x, y;
@@ -782,12 +876,12 @@
         put(g, x, y, c);
       }
       outline(g, 'K', false);
-      var gl = LET[letter];
-      for (y = 0; y < 5; y++) for (x = 0; x < 3; x++) if (gl[y][x] === 'X') {
-        put(g, 5 + x, 4 + y, 'c');
+      var gl = LET[letter], gw = gl[0].length, gh = gl.length, ox = Math.round(5.5 - gw / 2), oy = Math.round(5.5 - gh / 2);
+      for (y = 0; y < gh; y++) for (x = 0; x < gw; x++) if (gl[y][x] === 'X') {
+        put(g, ox + 1 + x, oy + 1 + y, 'c');
       }
       // redraw letter on top of shadow pass in correct order
-      for (y = 0; y < 5; y++) for (x = 0; x < 3; x++) if (gl[y][x] === 'X') put(g, 4 + x, 3 + y, 'W');
+      for (y = 0; y < gh; y++) for (x = 0; x < gw; x++) if (gl[y][x] === 'X') put(g, ox + x, oy + y, 'W');
       put(g, 2, 2, f ? 'W' : 'a');
       if (f) { put(g, 9, 9, 'W'); }
       return g;
@@ -796,7 +890,11 @@
       pu_power: ['P', { a: '#ff9a9a', b: '#e02a2a', c: '#8a1020' }],
       pu_speed: ['S', { a: '#a8f59a', b: '#2ec04a', c: '#146a2a' }],
       pu_shield: ['B', { a: '#9ad8ff', b: '#2a78e0', c: '#143a8a' }],
-      pu_option: ['O', { a: '#ffd890', b: '#f08a1c', c: '#8a4210' }]
+      pu_option: ['O', { a: '#ffd890', b: '#f08a1c', c: '#8a4210' }],
+      pu_force: ['F', { a: '#fff0a0', b: '#e8b410', c: '#7a5200' }],
+      pu_spread: ['3', { a: '#e8b0ff', b: '#a040e0', c: '#521a8a' }],
+      pu_laser: ['L', { a: '#f4f8ff', b: '#8294b8', c: '#3a4668' }],
+      pu_wave: ['~', { a: '#a0fff0', b: '#18b8b0', c: '#0a6068' }]
     };
     Object.keys(spec).forEach(function (n) {
       def(n, 12, 12, [cap(spec[n][0], spec[n][1], 0), cap(spec[n][0], spec[n][1], 1)], spec[n][1]);
@@ -819,7 +917,359 @@
     def('hair_tuft', 8, 8, fr);
   })();
 
-  /* ============================================ TILEABLE BACKGROUNDS ======= */
+  /* ==================================================== v2 GAMEPLAY / FX SPRITES == */
+
+  /* ---- force pod 16x16: orange armoured sphere with a rotating band, cyan core (0-3 spin, 4-5 flash) */
+  (function () {
+    var fr = [];
+    for (var f = 0; f < 6; f++) {
+      var g = mk(16, 16), spin = f < 4 ? f : 0, fl = f >= 4, ang = spin * Math.PI / 2 + 0.4;
+      ell(g, 8, 8, 8, 8, 'K');
+      ell(g, 8, 8, 7, 7, function (x, y, u, v) {
+        var l = -u * 0.6 - v * 0.8, c;
+        c = l > 0.5 ? 'Y' : (l > 0.12 ? 'y' : (l > -0.35 ? 'o' : (l > -0.7 ? 'r' : 'R')));
+        if (fl) c = (f === 4) ? (l > 0.1 ? 'W' : 'Y') : (l > -0.3 ? 'W' : 'y');
+        return c;
+      });
+      var i;
+      for (i = 0; i < 16; i++) {                                   // equator band with rotating rivets
+        var bx = Math.round(8 + Math.cos(i / 16 * 6.283 + ang) * 6.6), by = Math.round(8 + Math.sin(i / 16 * 6.283 + ang) * 2.2);
+        if (Math.sin(i / 16 * 6.283 + ang) > -0.1) put(g, bx, by, fl ? 'W' : (i % 4 === 0 ? 'Y' : 'R'));
+      }
+      ell(g, 8, 8, 3.1, 3.1, 'K');
+      ell(g, 8, 8, 2.3, 2.3, function (x, y, u, v) { return fl ? 'W' : ((-u - v) > 0.5 ? 'W' : (v > 0.2 ? 'C' : 'c')); });
+      put(g, Math.round(8 + Math.cos(ang) * 1.2), Math.round(8 + Math.sin(ang) * 1.2), 'W');
+      fr.push(g);
+    }
+    def('force', 16, 16, fr, { c: '#5fe8ff', C: '#1c8ad0' });
+  })();
+
+  /* ---- charge orb 16x16: 0-1 growing, 2 tier-1 (+ring), 3 tier-2 (+double ring), 4-5 tier-3 flicker */
+  (function () {
+    var rad = [2.2, 3.6, 4.8, 5.6, 6.4, 6.4], fr = [];
+    for (var f = 0; f < 6; f++) {
+      var g = mk(16, 16), r = rad[f], i, a;
+      ell(g, 8, 8, r + 1, r + 1, 'z');
+      ell(g, 8, 8, r, r, function (x, y, u, v) { return (u * u + v * v) < 0.35 ? 'W' : 'c'; });
+      if (f >= 4) {
+        ell(g, 8, 8, r + 1, r + 1, f === 4 ? 'W' : 'c');
+        ell(g, 8, 8, r, r, function (x, y, u, v) { return (u * u + v * v) < 0.5 ? 'W' : (f === 4 ? 'c' : 'Y'); });
+      }
+      if (f >= 2) for (a = 0; a < 6.283; a += 0.35) put(g, 8 + Math.cos(a) * (r + 2), 8 + Math.sin(a) * (r + 2), 'c');
+      if (f >= 3) for (a = 0; a < 6.283; a += 0.22) put(g, 8 + Math.cos(a) * (r + 3 - (f >= 4 ? 0.4 : 0)), 8 + Math.sin(a) * (r + 3 - (f >= 4 ? 0.4 : 0)), 'W');
+      if (f >= 4) for (i = 0; i < 8; i++) {                         // sparks
+        var sa = i * 0.785 + (f === 5 ? 0.39 : 0);
+        put(g, 8 + Math.cos(sa) * 7.4, 8 + Math.sin(sa) * 7.4, 'W');
+      }
+      fr.push(g);
+    }
+    def('charge_orb', 16, 16, fr, { c: '#6ee8ff', z: '#2a8cff' });
+  })();
+
+  /* ---- muzzle flash 8x8 (left edge = nose tip, vertical centre = row 4) */
+  (function () {
+    var spec = [[3.4, 3.2, 7], [2.6, 2.2, 5], [1.6, 1.3, 3]], fr = [];
+    spec.forEach(function (sp, f) {
+      var g = mk(8, 8);
+      ell(g, sp[0], 4, sp[0] + 0.4, sp[1], function (x, y, u, v) { return (u * u + v * v) < 0.35 ? 'W' : (f === 2 ? 'o' : 'Y'); });
+      for (var x = 0; x < sp[2]; x++) put(g, x, 3.5 + (x % 2 ? 0 : 0.5), x > sp[2] - 3 ? 'o' : 'Y');
+      if (f < 2) { put(g, 1, 1, 'o'); put(g, 1, 6, 'o'); }
+      fr.push(g);
+    });
+    def('muzzle', 8, 8, fr);
+  })();
+
+  /* ---- bullet hit spark 8x8 */
+  def('bullet_hit', 8, 8, [[
+    '...WW...',
+    '...WW...',
+    '.W.WW.W.',
+    'WWWWWWWW',
+    'WWWWWWWW',
+    '.W.WW.W.',
+    '...WW...',
+    '...WW...'
+  ], [
+    'Y..oo..Y',
+    '.Y.YY.Y.',
+    '..YWWY..',
+    'oYWWWWYo',
+    'oYWWWWYo',
+    '..YWWY..',
+    '.Y.YY.Y.',
+    'Y..oo..Y'
+  ], [
+    '.o....o.',
+    '........',
+    '...r....',
+    'o......o',
+    '....r...',
+    '...r..r.',
+    '........',
+    '.o....o.'
+  ]]);
+
+  /* ---- player death 32x32: ship (at 4,8) flashes, splits, fireball, debris, embers */
+  (function () {
+    var base = playerBase(), fr = [], R = rng(808), i;
+    function chunk(dst, x0, x1, dx, dy) {
+      for (var y = 0; y < 16; y++) for (var x = x0; x <= x1; x++)
+        if (base[y][x] !== '.') put(dst, x + 4 + dx, y + 8 + dy, base[y][x]);
+    }
+    function debris(g, n, r0, r1) {
+      for (var k = 0; k < n; k++) {
+        var a = R() * 6.283, d = r0 + R() * (r1 - r0), cx = 16 + Math.cos(a) * d, cy = 16 + Math.sin(a) * d * 0.8;
+        var c = ['w', 'b', 'B', 'g', 'y'][Math.floor(R() * 5)];
+        put(g, cx, cy, c); if (R() < 0.5) put(g, cx + 1, cy, c);
+      }
+    }
+    function fire(gr, g) { paste(g, gr, 0, 0); }
+    var g;
+    g = mk(32, 32); chunk(g, 0, 23, 0, 0);                       // f0: white-hot flash
+    for (var y = 0; y < 32; y++) for (var x = 0; x < 32; x++) if (g[y][x] !== '.' && g[y][x] !== 'K') g[y][x] = (x + y) % 2 ? 'W' : 'Y';
+    put(g, 3, 16, 'o'); put(g, 2, 16, 'r'); put(g, 28, 16, 'W'); fr.push(g);
+    g = mk(32, 32); fire(boomFrame(32, 6, [0.55, 0.9, 1, 1], 0, 0, 801, 1), g);   // f1: split + small fireball
+    chunk(g, 0, 9, -3, 2); chunk(g, 10, 16, 0, -3); chunk(g, 17, 23, 3, 1); debris(g, 6, 8, 12); fr.push(g);
+    g = mk(32, 32); fire(boomFrame(32, 10.5, [0.4, 0.7, 0.92, 1], 0, 0, 802, 2), g);
+    chunk(g, 0, 7, -7, 5); chunk(g, 12, 15, 1, -8); chunk(g, 19, 23, 7, 3); debris(g, 10, 9, 14); fr.push(g);
+    g = mk(32, 32); fire(boomFrame(32, 14.5, [0.22, 0.5, 0.76, 0.93], 0, 0, 803, 3), g);
+    debris(g, 12, 11, 15); fr.push(g);
+    g = mk(32, 32); fire(boomFrame(32, 15.5, [0, 0.3, 0.62, 0.86], 5, 0.2, 804, 4), g); debris(g, 8, 13, 15.5); fr.push(g);
+    g = mk(32, 32); fire(boomFrame(32, 14, [0, 0, 0.2, 0.55], 9, 0.5, 805, 5), g); fr.push(g);
+    def('player_die', 32, 32, fr, { w: '#eef4ff', g: '#a5b4d4', b: '#6478a8', B: '#3a4a78', c: '#5fe8ff', C: '#1c8ad0', S: '#4a3a5a' });
+  })();
+
+  /* ---- shield pop 32x24: the bubble cracks, breaks into arcs, then shards and sparkles */
+  (function () {
+    var fr = [];
+    for (var f = 0; f < 4; f++) {
+      var g = mk(32, 24), a, i, R = rng(900 + f);
+      for (a = 0; a < 6.283; a += 0.018) {
+        var px = 16 + Math.cos(a) * 15.2, py = 12 + Math.sin(a) * 11.2, keep;
+        if (f === 0) keep = Math.sin(a * 5) > -0.7;
+        else if (f === 1) keep = Math.sin(a * 6 + 1) > 0.15;
+        else if (f === 2) keep = Math.sin(a * 11) > 0.72;
+        else keep = Math.sin(a * 17) > 0.9;
+        if (keep) put(g, px, py, f < 2 ? 'a' : 'b');
+        if (f === 0 && keep) put(g, 16 + Math.cos(a) * 14.2, 12 + Math.sin(a) * 10.2, 'b');
+      }
+      if (f === 0) for (i = 0; i < 3; i++) {                        // cracks
+        var ca = 0.7 + i * 2.1;
+        line(g, 16 + Math.cos(ca) * 15, 12 + Math.sin(ca) * 11, 16 + Math.cos(ca) * 8, 12 + Math.sin(ca) * 6, 'h');
+      }
+      var n = [0, 6, 9, 6][f];
+      for (i = 0; i < n; i++) {                                     // flying shards / sparkles
+        var sa = R() * 6.283, sd = 6 + R() * 9;
+        var sx = 16 + Math.cos(sa) * sd * 1.2, sy = 12 + Math.sin(sa) * sd * 0.9;
+        put(g, sx, sy, f === 3 ? 'h' : 'g'); if (f < 3) put(g, sx + 1, sy, 'b');
+      }
+      fr.push(g);
+    }
+    def('shield_pop', 32, 24, fr, {
+      a: 'rgba(140,230,255,0.95)', b: 'rgba(140,230,255,0.55)', f: 'rgba(70,160,255,0.16)',
+      h: 'rgba(255,255,255,0.95)', g: 'rgba(190,245,255,0.8)'
+    });
+  })();
+
+  /* ---- pickup flash 24x24: star + expanding ring */
+  (function () {
+    var fr = [];
+    for (var f = 0; f < 5; f++) {
+      var g = mk(24, 24), a, r = [3, 6, 9, 11, 11.8][f], arm = [5, 8, 6, 3, 0][f];
+      for (a = 0; a < 6.283; a += 0.04) {
+        if (f >= 3 && Math.sin(a * 9 + f) < 0) continue;
+        if (f === 4 && Math.sin(a * 5) < 0.3) continue;
+        put(g, 12 + Math.cos(a) * r, 12 + Math.sin(a) * r, f < 2 ? 'Y' : (f < 4 ? 'y' : 'o'));
+      }
+      for (var k = -arm; k <= arm; k++) {
+        put(g, 12 + k, 11, Math.abs(k) < arm * 0.5 ? 'W' : 'Y'); put(g, 11, 12 + k, Math.abs(k) < arm * 0.5 ? 'W' : 'Y');
+        if (k > -2 && k < 2) { put(g, 12 + k, 12, 'W'); put(g, 12, 12 + k, 'W'); }
+      }
+      if (f > 0 && f < 4) { put(g, 12 - r * 0.7, 12 - r * 0.7, 'W'); put(g, 12 + r * 0.7, 12 + r * 0.7, 'W'); put(g, 12 + r * 0.7, 12 - r * 0.7, 'Y'); put(g, 12 - r * 0.7, 12 + r * 0.7, 'Y'); }
+      fr.push(g);
+    }
+    def('pu_flash', 24, 24, fr);
+  })();
+
+  /* ---- fart puff 12x12 (frame 0 = biggest, brightest burst) */
+  (function () {
+    var fr = [], spec = [[4.9, 0], [5.3, 0.12], [4.7, 0.3], [3.8, 0.5], [3, 0.72]];
+    spec.forEach(function (sp, f) {
+      var g = mk(12, 12), R = rng(70 + f);
+      var lumps = [[5.8, 6.4, sp[0] * 0.72], [3.6, 5.6, sp[0] * 0.55], [8.2, 6, sp[0] * 0.6], [6, 4, sp[0] * 0.5]];
+      lumps.forEach(function (L) {
+        ell(g, L[0], L[1], L[2], L[2] * 0.85, function (x, y, u, v) {
+          if (R() < sp[1]) return null;
+          var l = -u * 0.5 - v * 0.8;
+          return l > 0.3 ? 'a' : (l > -0.25 ? 'b' : 'c');
+        });
+      });
+      if (f < 3) outline(g, 'd', false);
+      fr.push(g);
+    });
+    def('fart_puff', 12, 12, fr, { a: '#e4ff96', b: '#a0e03c', c: '#5e9c20', d: '#2e5a14' });
+  })();
+
+  /* ---- smoke 8x8 (grey puff rising, thinner each frame) */
+  (function () {
+    var fr = [], spec = [[2.2, 5.2, 0], [3, 4.4, 0.1], [3.4, 3.6, 0.3], [3.6, 2.8, 0.55]];
+    spec.forEach(function (sp, f) {
+      var g = mk(8, 8), R = rng(33 + f);
+      ell(g, 4, sp[1], sp[0], sp[0] * 0.9, function (x, y, u, v) {
+        if (R() < sp[2]) return null; var l = -u * 0.5 - v * 0.8; return l > 0.3 ? 'a' : (l > -0.3 ? 'b' : 'c');
+      });
+      fr.push(g);
+    });
+    def('smoke', 8, 8, fr, { a: '#c4bcd4', b: '#807690', c: '#483e5c' });
+  })();
+
+  /* ---- life icon 12x8 */
+  def('icon_life', 12, 8, [[
+    '...KK.......',
+    '..KwwKKK....',
+    'KKwwwwcKKK..',
+    'KygggggwwoKK',
+    'KBbbbbbbbKK.',
+    '.KBBbbKKK...',
+    '..KKKK......',
+    '............'
+  ]], { w: '#eef4ff', g: '#a5b4d4', b: '#6478a8', B: '#3a4a78', c: '#5fe8ff' });
+
+  /* ---- boss death 64x64: fireball + flesh chunks (lazy) */
+  lazy('boss_gib', 64, 64, 8, function () {
+    var spec = [[10, [0.55, 0.9, 1, 1], 0, 0], [19, [0.4, 0.7, 0.92, 1], 0, 0], [27, [0.22, 0.5, 0.76, 0.93], 0, 0],
+      [31, [0, 0.38, 0.68, 0.9], 6, 0.14], [31, [0, 0, 0.42, 0.74], 12, 0.3], [31, [0, 0, 0, 0.5], 17, 0.5],
+      [31, [0, 0, 0, 0.35], 21, 0.7], [30, [0, 0, 0, 0.3], 24, 0.85]], out = [];
+    spec.forEach(function (sp, f) {
+      var g = boomFrame(64, sp[0], sp[1], sp[2], sp[3], 950 + f, f), R = rng(960), k, t = f / 7;
+      if (f >= 1) for (k = 0; k < 14; k++) {
+        var a = k * 6.283 / 14 + R() * 0.3, d0 = 5 + R() * 7, sp2 = 14 + R() * 17;
+        var d = d0 + sp2 * (1 - (1 - t) * (1 - t)), cx = 32 + Math.cos(a) * d, cy = 32 + Math.sin(a) * d * 0.9 + 14 * t * t;
+        var ch = R() < 0.7 ? ['p', 'l', 'd', 'L'] : ['h', 'H', 'h', 'H'], q, w2;
+        for (q = -1; q <= 3; q++) for (w2 = -1; w2 <= 3; w2++) if (q < 0 || w2 < 0 || q > 2 || w2 > 2) { if (!((q < 0 || q > 2) && (w2 < 0 || w2 > 2)) && at(g, cx + q, cy + w2) !== 'K') put(g, cx + q, cy + w2, 'K'); }
+        for (q = 0; q < 3; q++) for (w2 = 0; w2 < 3; w2++) put(g, cx + q, cy + w2, (q + w2 === 0) ? ch[1] : ((q + w2 >= 3) ? ch[2] : ch[0]));
+        put(g, cx, cy, ch[3]);
+      }
+      out.push(g);
+    });
+    return out;
+  }, { S: '#4a3a5a' });
+
+  /* ---- butt_armored 24x24: hairy butt in white briefs with metal plates; 3 crack levels */
+  (function () {
+    var fr = [];
+    for (var lv = 0; lv < 3; lv++) {
+      var g = butt({
+        w: 24, h: 24, seed: 83, cx: 12, cw: 2, cy: 13, rx: 6.1, ry: 7.2, sep: 3.5, hair: 0.65, hairLong: 0.5, fur: 6, tuft: 3, tuftLen: 3,
+        spot: 0.06, eyes: 2.1, mouth: { dy: 3.4, rx: 1.9, ry: 2.7, teeth: { n: 6, len: 2, w: 2 }, lipHair: 4 }
+      }), x, y, R = rng(84 + lv);
+      for (y = 14; y < 24; y++) for (x = 0; x < 24; x++) {
+        var c = g[y][x];
+        if ('pLlLdD'.indexOf(c) < 0 || Math.abs(x + 0.5 - 12) <= 3.5) continue;
+        g[y][x] = (c === 'd') ? 'k' : (c === 'D' ? 'u' : 'j');
+      }
+      for (x = 0; x < 24; x++) if (at(g, x, 14) === 'j' || at(g, x, 14) === 'k') { put(g, x, 14, 'u'); put(g, x, 15, x % 3 === 0 ? 'j' : (at(g, x, 15) === '.' ? '.' : 'k')); }
+      [[7, 17], [16, 17]].forEach(function (pt) {                   // metal plates
+        for (var j = 0; j < 4; j++) for (var i = 0; i < 4; i++) if (at(g, pt[0] + i, pt[1] + j) !== '.' && at(g, pt[0] + i, pt[1] + j) !== 'K') put(g, pt[0] + i, pt[1] + j, j === 0 || i === 0 ? 'W' : (j === 3 || i === 3 ? 'u' : 'k'));
+      });
+      if (lv >= 1) {
+        walk(g, 5, 15, 8, 'K', R, 'jku'); walk(g, 18, 16, 8, 'K', R, 'jku'); walk(g, 10, 19, 5, 'K', R, 'jku');
+      }
+      if (lv >= 2) {
+        walk(g, 6, 18, 9, 'K', R, 'jku'); walk(g, 17, 20, 9, 'K', R, 'jku'); walk(g, 3, 21, 6, 'K', R, 'jku');
+        [[5, 19], [6, 19], [5, 20], [17, 18], [18, 18], [18, 19]].forEach(function (q) { if ('jku'.indexOf(at(g, q[0], q[1])) >= 0) put(g, q[0], q[1], (q[0] + q[1]) % 2 ? 'p' : 'd'); });
+        put(g, 4, 18, 'y'); put(g, 19, 17, 'y'); put(g, 7, 21, 'Y');
+      }
+      fr.push(g);
+    }
+    def('butt_armored', 24, 24, fr, { j: '#f6f8ff', k: '#b4bcd8', u: '#656f90' });
+  })();
+
+  /* ---- gas_cloud 20x16: grinning green fart cloud, 4-frame loop */
+  (function () {
+    var fr = [];
+    for (var f = 0; f < 4; f++) {
+      var g = mk(20, 16), ph = f * Math.PI / 2, bl = [[6, 9.5, 4.8, 4], [11, 6.8, 5.4, 4.6], [15, 9.4, 4.3, 3.8], [10, 11, 6, 3.3]];
+      bl.forEach(function (b, i) {
+        var jx = Math.sin(ph + i * 1.7) * 0.7, jy = Math.cos(ph + i * 2.3) * 0.7;
+        ell(g, b[0] + jx, b[1] + jy, b[2], b[3], function (x, y, u, v) { return v < -0.35 ? 'a' : (v > 0.4 ? 'c' : 'b'); });
+      });
+      outline(g, 'd', false);
+      [[8, 8.5], [13, 8.5]].forEach(function (e, k) {                // angry eyes
+        ell(g, e[0], e[1], 2, 1.7, 'W'); put(g, e[0] + (k ? -0.6 : 0.6), e[1] + 0.3, 'K'); put(g, e[0] + (k ? -0.6 : 0.6), e[1] - 0.7, 'K');
+        line(g, e[0] - (k ? -2 : 2), e[1] - 2.8, e[0] + (k ? -2 : 2), e[1] - 1.8, 'd');
+      });
+      line(g, 8, 12, 10, 13, 'd'); line(g, 10, 13, 13, 12, 'd'); put(g, 10, 12, 'W'); put(g, 11, 12, 'W');   // grin w/ teeth
+      var by = 14 - ((f * 2) % 8) * 0.3;
+      ell(g, 18, by, 1.4, 1.4, 'a'); outline(g, 'd', false); put(g, 17, by - 1, 'W');
+      fr.push(g);
+    }
+    def('gas_cloud', 20, 16, fr, { a: '#d4f87a', b: '#8cd030', c: '#549a1c', d: '#27541a' });
+  })();
+
+  /* ---- tooth_mine 14x14: hairy ball, gaping toothed mouth, spikes turn */
+  (function () {
+    var fr = [];
+    for (var f = 0; f < 3; f++) {
+      var g = mk(14, 14), i, base = f * Math.PI / 12 + 0.2, mr = [1.7, 2.3, 2.9][f];
+      for (i = 0; i < 10; i++) {
+        var a = base + i * Math.PI / 5, len = (i % 2) ? 6.2 : 6.9;
+        line(g, 6.5, 6.5, 6.5 + Math.cos(a) * len, 6.5 + Math.sin(a) * len, 'h');
+        put(g, 6.5 + Math.cos(a) * len, 6.5 + Math.sin(a) * len, 'H');
+      }
+      ell(g, 7, 7, 5.3, 5.3, 'K');
+      ell(g, 7, 7, 4.5, 4.5, function (x, y, u, v) { var l = -u * 0.6 - v * 0.8; return l > 0.4 ? 'l' : (l < -0.35 ? 'd' : 'p'); });
+      ell(g, 7, 7.3, mr, mr * 1.15, function (x, y, u, v) { return (u * u + v * v < 0.3) ? 'M' : 'm'; });
+      teethRing(g, 7, 7.3, mr, mr * 1.15, 6, 2, 2, 0.3 + f * 0.5);
+      fr.push(g);
+    }
+    def('tooth_mine', 14, 14, fr, { h: '#7a4018', H: '#e0a060' });
+  })();
+
+  /* ---- butt_turret 16x16: floor mound + hairy stalk + butt head (0 closed, 1 open, 2 firing); base on bottom row */
+  (function () {
+    var fr = [];
+    for (var f = 0; f < 3; f++) {
+      var g = mk(16, 16), y, x, R = rng(15);
+      ell(g, 9, 14.6, 6.8, 2.6, function (x, y, u, v) { return v < -0.3 ? 'p' : (v > 0.3 ? 'D' : 'd'); });          // mound
+      for (y = 8; y <= 13; y++) { put(g, 8, y, 'p'); put(g, 9, y, 'd'); put(g, 10, y, 'D'); }                    // stalk
+      for (y = 9; y <= 13; y += 2) { put(g, 7, y, 'h'); put(g, 11, y + 1, 'h'); }
+      outline(g, 'K', false);
+      var head = butt({
+        w: 12, h: 11, seed: 19, cx: 5.5, cw: 1, cy: 5.4, rx: 3.5, ry: 4.6, sep: 2.2, hair: 0.5, hairLong: 0.3, fur: 2, tuft: 2, tuftLen: 2, spot: 0.06,
+        mouth: { dy: 0.2, rx: [0.6, 1.3, 1.9][f], ry: [1.4, 2.5, 3.2][f], teeth: f ? { n: 5, len: 1, w: 1 } : null }
+      });
+      paste(g, head, 0, 0);
+      if (f === 2) { put(g, 1, 3, 'Y'); put(g, 0, 2, 'o'); put(g, 0, 4, 'o'); put(g, 2, 4, 'W'); put(g, 1, 4, 'Y'); }
+      fr.push(g);
+    }
+    def('butt_turret', 16, 16, fr);
+  })();
+
+  /* ---- midboss_butt 56x48: twin cheeks, hair crown, furious eyes (lazy).  0-1 idle, 2 mouth open, 3 hurt */
+  lazy('midboss_butt', 56, 48, 4, function () {
+    var P = [{ l: 0, r: 0, mr: 2, my: 8 }, { l: -1, r: 0, mr: 2, my: 8 }, { l: -1, r: -1, mr: 6, my: 11, open: 1 }, { l: 1, r: 1, mr: 2, my: 8, hurt: 1 }];
+    return P.map(function (p, f) {
+      var g = butt({
+        w: 56, h: 48, seed: 71, cx: 28, cw: 2, cy: 25.5, rx: 15.5, ry: 17.5, sep: p.hurt ? 8 : 8.5, lDy: p.l, rDy: p.r,
+        hair: 0.8, hairLong: 0.6, hairMax: 1, fur: 60, tuft: 8, tuftLen: 5, spot: 0.06, wink: p.hurt ? 3 : 0, eyes: 3, dither: true,
+        mouth: { dy: 0, rx: p.mr, ry: p.my, lip: 1, teeth: { n: 10, len: 3 + (p.open ? 1 : 0), w: 3 }, tongue: p.open ? { rx: p.mr * 0.8, ry: p.my * 0.5, dy: 0.5 } : null, lipHair: 12, lipHairLen: 3 }
+      });
+      if (p.hurt) {                                                   // impact stars + sweat
+        [[12, 14], [44, 34]].forEach(function (c) {
+          line(g, c[0] - 3, c[1], c[0] + 3, c[1], 'W'); line(g, c[0], c[1] - 3, c[0], c[1] + 3, 'W');
+          line(g, c[0] - 2, c[1] - 2, c[0] + 2, c[1] + 2, 'Y'); line(g, c[0] - 2, c[1] + 2, c[0] + 2, c[1] - 2, 'Y');
+        });
+      }
+      return g;
+    });
+  });
+
+  /* ============================================ TILEABLE BACKGROUNDS =======
+   * Five layers x three themes (0 flesh/violet, 1 lava-red crack, 2 green/gold temple), registered as
+   * bg_<layer>_<i>.  Every generator is periodic in x with period = tile width (integer-frequency sines,
+   * wrapped value-noise, wrapped bumps), so column 0 continues seamlessly from column W-1.
+   * Theme 0 is built eagerly (it is also the v1 alias bg_far / bg_rocks / bg_ceiling); 1-2 lazily. */
   var TAU = Math.PI * 2;
   function hash2(ix, iy, seed) {
     var n = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + Math.imul(seed, 1274126177)) | 0;
@@ -837,15 +1287,42 @@
   function wrapPut(g, x, y, c) { put(g, ((x % g[0].length) + g[0].length) % g[0].length, y, c); }
   function wrapDist(a, b, P) { var d = Math.abs(a - b) % P; return Math.min(d, P - d); }
 
-  /* ---- bg_rocks 64x40 : alien rock / flesh ground */
-  (function () {
-    var W = 64, H = 40, g = mk(W, H), x, y, R = rng(5);
+  var TH = [
+    { // ---- 0: pink flesh / violet (the v1 look)
+      ph: [0.6, 2.0, 4.0, 1.3], bumps: [[10, 6, 5], [38, 5, 6], [54, 4, 4], [84, 6, 5], [102, 5, 6], [118, 4, 4]], shape: 'tri',
+      rocks: { a: '#c0708c', b: '#80446e', c: '#5e2f58', d: '#44223f', e: '#2e1530', O: '#8a5236', o: '#6b3a2a', q: '#3e2018', g: '#9a6a86', V: '#3a1c5a', r: '#a8305a', K: '#140818' },
+      ceil: { a: '#d07a9a', b: '#9a4670', c: '#7a3260', d: '#52204a', e: '#b05882', r: '#6a1c44', K: '#140818' },
+      far: { a: '#4a5cb0', b: '#2a3a85', B: '#323f92', c: '#2f3d8a', C: '#1a2260', D: '#141a50', E: '#0c1038', L: '#6a8ae0' },
+      mid: { a: '#7a4a98', b: '#4a2a68', c: '#38204f', d: '#2a1840', r: '#c05a90' },
+      fore: { a: '#4a2a40', K: '#12060e' }
+    },
+    { // ---- 1: lava-red crack
+      ph: [2.1, 0.4, 5.1, 3.3], bumps: [[8, 3, 8], [30, 4, 9], [46, 3, 6], [70, 3, 9], [92, 4, 8], [110, 3, 6]], shape: 'tri', lava: true,
+      rocks: { a: '#d8603c', b: '#7a2e2a', c: '#56201e', d: '#3a1418', e: '#26101a', O: '#5a3a3a', o: '#3e2630', q: '#241418', g: '#a8503a', V: '#3a1018', r: '#ff7a20', K: '#14060a', h: '#2a0a0a', H: '#8a2a1a' },
+      ceil: { a: '#e0643c', b: '#8a3030', c: '#64222a', d: '#40161e', e: '#b04838', r: '#ff8a20', K: '#14060a', h: '#2a0a0a', H: '#8a2a1a' },
+      far: { a: '#a04060', b: '#5a1a3a', B: '#681f40', c: '#4a1632', C: '#2e0e24', D: '#1c0818', E: '#10040e', L: '#ff9a40' },
+      mid: { a: '#b04838', b: '#4a1a22', c: '#35121a', d: '#240c14', r: '#ff8a30' },
+      fore: { a: '#5a1a14', K: '#0e0406' }
+    },
+    { // ---- 2: green / gold temple
+      ph: [4.2, 1.1, 2.6, 5.5], bumps: [[16, 3, 7], [48, 3, 9], [80, 3, 7], [112, 3, 9]], shape: 'rect', bricks: true,
+      rocks: { a: '#90c870', b: '#4a8a50', c: '#2f6040', d: '#1f4030', e: '#142a22', O: '#d8b048', o: '#8a6a28', q: '#3a3018', g: '#d8e8a0', V: '#0e281a', r: '#e8c850', K: '#08140c', h: '#2f6a30', H: '#7ac060' },
+      ceil: { a: '#a0d078', b: '#4a8a58', c: '#336a48', d: '#1f4632', e: '#78b068', r: '#e8c850', K: '#08140c', O: '#d8b048', o: '#8a6a28', h: '#2f6a30', H: '#7ac060' },
+      far: { a: '#6ab890', b: '#2e6a58', B: '#357a60', c: '#1f5040', C: '#123a30', D: '#0c2a24', E: '#061814', L: '#f0d870' },
+      mid: { a: '#7ab070', b: '#2f5a40', c: '#224434', d: '#16302a', r: '#e8c850' },
+      fore: { a: '#2a5a30', K: '#06140a' }
+    }
+  ];
+
+  function rocksGen(T) {
+    var W = 128, H = 40, g = mk(W, H), x, y, ph = T.ph;
     for (x = 0; x < W; x++) {
-      var ys = Math.round(10 + 3 * Math.sin(TAU * 1 * x / W + 0.6) + 2 * Math.sin(TAU * 3 * x / W + 2.0) + 1.5 * Math.sin(TAU * 5 * x / W + 4.0));
-      // a few spiky rocks (periodic triangle bumps)
+      var ys = 10 + 3 * Math.sin(TAU * 2 * x / W + ph[0]) + 2 * Math.sin(TAU * 3 * x / W + ph[1]) + 1.5 * Math.sin(TAU * 10 * x / W + ph[2]) + 1 * Math.sin(TAU * 5 * x / W + ph[3]);
+      ys = T.bricks ? 12 + 2 * Math.round(Math.sin(TAU * 3 * x / W + ph[0]) * 1.3) : Math.round(ys);
       var bump = 0;
-      [[10, 6, 5], [38, 5, 6], [54, 4, 4]].forEach(function (b) {
-        var d = wrapDist(x, b[0], W); if (d < b[1]) bump = Math.max(bump, Math.round(b[2] * (1 - d / b[1])));
+      T.bumps.forEach(function (b) {
+        var d = wrapDist(x, b[0], W);
+        if (d < b[1]) bump = Math.max(bump, T.shape === 'rect' ? b[2] : Math.round(b[2] * (1 - d / b[1])));
       });
       ys -= bump;
       for (y = Math.max(0, ys - 1); y < H; y++) {
@@ -860,39 +1337,42 @@
           else if (dd < 20) c = (n1 > 0.5 ? (brown ? 'o' : 'c') : (brown ? 'q' : 'd'));
           else c = (n2 > 0.6 ? (brown ? 'q' : 'd') : 'e');
           if (dd > 2) {
-            var crk = Math.abs(n1 - 0.5);
-            if (crk < 0.012 && dd > 5) c = 'K';
-            else if (Math.abs(y - (22 + 4 * Math.sin(TAU * 2 * x / W + 1))) < 0.7) c = 'r';
-            else if (Math.abs(y - (31 + 3 * Math.sin(TAU * 3 * x / W + 4))) < 0.55) c = 'V';
+            var crk = Math.abs(n1 - 0.5), lv = 22 + 4 * Math.sin(TAU * 4 * x / W + 1);
+            if (T.lava && Math.abs(y - lv) < 1.15) c = Math.abs(y - lv) < 0.45 ? 'Y' : 'r';
+            else if (T.lava && Math.abs(y - lv) < 2.0 && n3 < 0.5) c = 'g';
+            else if (crk < 0.012 && dd > 5) c = 'K';
+            else if (!T.lava && Math.abs(y - (22 + 4 * Math.sin(TAU * 4 * x / W + 1))) < 0.7) c = 'r';
+            else if (Math.abs(y - (31 + 3 * Math.sin(TAU * 6 * x / W + 4))) < 0.55) c = 'V';
             else if (n3 > 0.965) c = 'g';
             else if (n3 < 0.03) c = 'K';
+          }
+          if (T.bricks && dd > 2) {                       // temple blocks + gold trim
+            var by = dd % 7, row = Math.floor(dd / 7);
+            if (dd === 3 || dd === 4) c = dd === 3 ? 'O' : 'o';
+            else if (by === 0) c = 'V';
+            else if (((x + (row % 2) * 8) % 16) === 0) c = 'V';
+            else if (by === 1 && c !== 'g') c = (n3 > 0.5) ? 'b' : c;
           }
         }
         put(g, x, y, c);
       }
     }
-    // short hairs growing from the surface
-    for (x = 0; x < W; x++) {
-      if (hash2(x, 5, 41) < 0.14) {
+    for (x = 0; x < W; x++) {                              // short hairs (moss / burnt hair) from the surface
+      if (hash2(x, 5, 41 + T.ph[0] * 7 | 0) < 0.13) {
         var top = 0; while (top < H && g[top][x] === '.') top++;
         var len = 1 + Math.floor(hash2(x, 6, 42) * 3);
-        for (var k = 1; k <= len; k++) wrapPut(g, x + (k > 2 ? 1 : 0), top - 1 - k + 1 - 0, k === len ? 'H' : 'h');
+        for (var k = 1; k <= len; k++) wrapPut(g, x + (k > 2 ? 1 : 0), top - 1 - k + 1, k === len ? 'H' : 'h');
       }
     }
-    def('bg_rocks', W, H, [g], {
-      a: '#c0708c', b: '#80446e', c: '#5e2f58', d: '#44223f', e: '#2e1530',
-      O: '#8a5236', o: '#6b3a2a', q: '#3e2018', g: '#9a6a86', V: '#3a1c5a', r: '#a8305a', K: '#140818'
-    });
-  })();
+    return g;
+  }
 
-  /* ---- bg_ceiling 64x20 : hairy fleshy ceiling */
-  (function () {
-    var W = 64, H = 20, g = mk(W, H), x, y, R = rng(8);
-    var yb = [];
+  function ceilingGen(T) {
+    var W = 128, H = 20, g = mk(W, H), x, y, R = rng(8 + (T.ph[0] * 10 | 0)), yb = [], ph = T.ph;
+    var drips = T.shape === 'rect' ? [[10, 3, 3], [42, 3, 4], [74, 3, 3], [106, 3, 4]] : [[8, 4, 3], [30, 5, 4], [50, 3, 3], [76, 4, 3], [98, 5, 4], [118, 3, 3]];
     for (x = 0; x < W; x++) {
-      yb[x] = Math.round(8 + 2.2 * Math.sin(TAU * 2 * x / W + 1.0) + 1.6 * Math.sin(TAU * 5 * x / W + 3.0) + 0.9 * Math.sin(TAU * 9 * x / W));
-      // hanging fleshy drips (periodic)
-      [[8, 4, 3], [30, 5, 4], [50, 3, 3]].forEach(function (b) {
+      yb[x] = Math.round(8 + 2.2 * Math.sin(TAU * 4 * x / W + 1.0 + ph[0]) + 1.6 * Math.sin(TAU * 5 * x / W + 3.0 + ph[1]) + 0.9 * Math.sin(TAU * 9 * x / W + ph[2]) + 1.2 * Math.sin(TAU * 3 * x / W + ph[3]));
+      drips.forEach(function (b) {
         var d = wrapDist(x, b[0], W); if (d < b[1]) yb[x] += Math.round(b[2] * (1 - d / b[1]));
       });
     }
@@ -908,47 +1388,49 @@
           if (Math.abs(n1 - 0.5) < 0.022) c = 'd';
           else if (n3 > 0.97) c = 'a';
           else if (n3 < 0.025) c = 'K';
-          else if (Math.abs(y - (5 + 2 * Math.sin(TAU * 3 * x / W + 2))) < 0.5) c = 'r';
+          else if (Math.abs(y - (5 + 2 * Math.sin(TAU * 6 * x / W + 2))) < 0.5) c = 'r';
         }
+        if (T.shape === 'rect' && y < yb[x] && (x % 32 < 2)) c = (x % 32 === 0) ? 'O' : 'o';        // gold ribs
         put(g, x, y, c);
       }
+      if (T.lava && yb[x] > 10 && R() < 0.5) { put(g, x, yb[x], 'r'); put(g, x, yb[x] - 1, 'r'); }    // glowing drip tips
     }
-    // hanging hair strands (wrapped horizontally)
-    for (var i = 0; i < 16; i++) {
-      var sx = Math.floor(R() * W), len = 3 + Math.floor(R() * 6), ph = R() * 6, sway = 0.8 + R() * 0.8;
-      var y0 = yb[sx] + 2;
+    for (var i = 0; i < 30; i++) {                          // hanging hair strands / vines (wrapped)
+      var sx = Math.floor(R() * W), len = 3 + Math.floor(R() * 6), ph2 = R() * 6, sway = 0.8 + R() * 0.8, y0 = yb[sx] + 2;
       for (var k = 0; k < len && y0 + k < H; k++)
-        wrapPut(g, sx + Math.round(Math.sin(ph + k * 0.7) * sway * Math.min(1, k / 2)), y0 + k, k >= len - 1 ? 'H' : (k % 2 ? 'h' : 'h'));
+        wrapPut(g, sx + Math.round(Math.sin(ph2 + k * 0.7) * sway * Math.min(1, k / 2)), y0 + k, k >= len - 1 ? 'H' : 'h');
     }
-    def('bg_ceiling', W, H, [g], {
-      a: '#d07a9a', b: '#9a4670', c: '#7a3260', d: '#52204a', e: '#b05882', r: '#6a1c44', K: '#140818'
-    });
-  })();
-
-  /* ---- bg_far 64x60 : far organic silhouettes, dark blue */
-  (function () {
-    var W = 64, H = 60, g = mk(W, H), x, y;
+    return g;
+  }
+  // hairs on theme ceilings share h/H with the ground palette
+  function farGen(T, kind) {
+    var W = 128, H = 60, g = mk(W, H), x, y, ph = T.ph, back = [], front = [];
     function circTop(x, c) { var d = wrapDist(x, c[0], W); return d >= c[2] ? 999 : c[1] - Math.sqrt(c[2] * c[2] - d * d); }
-    var back = [], front = [];
+    function cone(x, cx, w, hgt) { var d = wrapDist(x, cx, W); return d < w ? hgt * (1 - d / w) : 0; }
     for (x = 0; x < W; x++) {
-      back[x] = 30 + 7 * Math.sin(TAU * 2 * x / W + 0.3) + 4.5 * Math.sin(TAU * 5 * x / W + 1.7) + 2 * Math.sin(TAU * 11 * x / W);
-      // spires (tentacle-ish) in the back layer
-      var sp = wrapDist(x, 14, W); if (sp < 3) back[x] -= 11 * (1 - sp / 3);
-      sp = wrapDist(x, 50, W); if (sp < 4) back[x] -= 14 * (1 - sp / 4);
-      front[x] = 44 + 4 * Math.sin(TAU * 3 * x / W + 2) + 2.5 * Math.sin(TAU * 7 * x / W + 0.5);
-      // two round "cheek" mounds with a crack between them
-      var m = Math.min(circTop(x, [27, 52, 10]), circTop(x, [38, 52, 10]));
-      front[x] = Math.min(front[x], m);
+      if (kind === 0) {
+        back[x] = 30 + 7 * Math.sin(TAU * 4 * x / W + 0.3) + 4.5 * Math.sin(TAU * 9 * x / W + 1.7) + 2 * Math.sin(TAU * 17 * x / W) + 3 * Math.sin(TAU * 3 * x / W + 2.2);
+        [[14, 3, 11], [50, 4, 14], [78, 3, 12], [114, 4, 15]].forEach(function (s) { back[x] -= cone(x, s[0], s[1], s[2]); });
+        front[x] = 44 + 4 * Math.sin(TAU * 5 * x / W + 2) + 2.5 * Math.sin(TAU * 13 * x / W + 0.5);
+        front[x] = Math.min(front[x], Math.min(circTop(x, [27, 52, 10]), circTop(x, [38, 52, 10]), circTop(x, [91, 52, 10]), circTop(x, [102, 52, 10])));
+      } else if (kind === 1) {                              // volcanoes
+        back[x] = 36 + 4 * Math.sin(TAU * 5 * x / W + 1) + 2 * Math.sin(TAU * 14 * x / W);
+        [[22, 18, 26], [70, 22, 30], [108, 14, 18]].forEach(function (s) { back[x] -= cone(x, s[0], s[1], s[2]); });
+        front[x] = 46 + 3 * Math.sin(TAU * 6 * x / W + 2) + 2 * Math.sin(TAU * 17 * x / W + 1);
+        [[44, 8, 7], [92, 10, 8]].forEach(function (s) { front[x] -= cone(x, s[0], s[1], s[2]); });
+      } else {                                              // temple columns + domes
+        back[x] = 36 + 3 * Math.sin(TAU * 3 * x / W + 0.5) + 2 * Math.sin(TAU * 8 * x / W + 1);
+        [[18, 3, 16], [26, 3, 20], [34, 3, 16], [82, 3, 18], [90, 3, 22], [98, 3, 18]].forEach(function (s) { if (wrapDist(x, s[0], W) <= s[1]) back[x] -= s[2]; });
+        [[62, 12, 8], [8, 7, 5]].forEach(function (s) { var d = wrapDist(x, s[0], W); if (d < s[1]) back[x] = Math.min(back[x], 31 - s[2] * Math.sqrt(1 - d * d / (s[1] * s[1])) + 6); });
+        front[x] = 47 + 3 * Math.sin(TAU * 4 * x / W + 1) + 2 * Math.sin(TAU * 11 * x / W + 2);
+      }
     }
     for (x = 0; x < W; x++) {
+      var yb = Math.round(back[x]), yf = Math.round(front[x]);
       for (y = 0; y < H; y++) {
         var c = '.';
-        var yb = Math.round(back[x]), yf = Math.round(front[x]);
-        if (y >= yb) {
-          c = (y === yb) ? 'r1' : 'B';
-          c = (y === yb) ? 'a' : ((y - yb < 6 && (x + y) % 2 === 0) ? 'b' : (y - yb < 6 ? 'B' : 'b'));
-          if ((y - yb) >= 6) c = 'b';
-        }
+        if (y >= yb) c = (y === yb) ? 'a' : ((y - yb < 6 && (x + y) % 2 === 0) ? 'b' : (y - yb < 6 ? 'B' : 'b'));
+        if (y >= yb + 6) c = 'b';
         if (y >= yf) {
           c = (y === yf) ? 'c' : 'C';
           if (y > yf && y < yf + 4 && (x + y) % 2 === 0) c = 'D';
@@ -959,19 +1441,80 @@
         if (c !== '.') put(g, x, y, c);
       }
     }
-    // faint organic lights on the back layer
-    [[6, 36], [20, 33], [33, 38], [46, 35], [58, 37]].forEach(function (p) {
-      if (at(g, p[0], p[1]) === 'b' || at(g, p[0], p[1]) === 'B') put(g, p[0], p[1], 'L');
+    var lights = kind === 1 ? [[22, 12], [70, 8], [108, 22], [8, 38], [50, 40]] : [[6, 36], [20, 33], [33, 38], [46, 35], [58, 37], [72, 36], [86, 33], [99, 38], [112, 35], [124, 37]];
+    lights.forEach(function (p) {
+      var c = at(g, p[0], p[1]);
+      if (kind === 1) {                                     // crater glow + lava streak down the cone
+        if (p[1] < 30) { for (var k = 0; k < 6; k++) if (at(g, p[0], p[1] + k) !== '.') put(g, p[0] + (k % 2), p[1] + k, k < 2 ? 'L' : 'L'); }
+      } else if (c === 'b' || c === 'B') put(g, p[0], p[1], 'L');
     });
-    def('bg_far', W, H, [g], {
-      a: '#4a5cb0', b: '#2a3a85', B: '#323f92', c: '#2f3d8a', C: '#1a2260', D: '#141a50', E: '#0c1038', L: '#6a8ae0'
-    });
-  })();
+    if (kind === 1) for (x = 0; x < W; x += 1) if (hash2(x, 3, 77) > 0.985) { var tp = Math.round(back[x]) + 1; if (at(g, x, tp) !== '.') put(g, x, tp, 'L'); }
+    return g;
+  }
+
+  function midGen(T, kind) {
+    var W = 128, H = 48, g = mk(W, H), x, y, ph = T.ph, top = [];
+    function bump(x, cx, w, hgt, sharp) { var d = wrapDist(x, cx, W); if (d >= w) return 0; var t = 1 - d / w; return hgt * (sharp ? t : Math.sqrt(t)); }
+    for (x = 0; x < W; x++) {
+      var base = 34 + 3 * Math.sin(TAU * 4 * x / W + ph[0]) + 1.5 * Math.sin(TAU * 11 * x / W + ph[1]);
+      if (kind === 0) {                                     // hairy stalks
+        [[10, 3, 18], [26, 2, 24], [48, 3, 20], [66, 2, 28], [90, 3, 22], [104, 2, 26], [120, 3, 16]].forEach(function (s) { base -= bump(x, s[0], s[1], s[2], false) + (wrapDist(x, s[0], W) < 1 ? 2 : 0); });
+      } else if (kind === 1) {                              // stalagmites
+        [[12, 9, 30], [34, 7, 22], [58, 10, 34], [82, 7, 24], [100, 9, 30], [120, 6, 16]].forEach(function (s) { base -= bump(x, s[0], s[1], s[2], true); });
+      } else {                                              // columns + capitals
+        [[14, 3, 22], [38, 3, 30], [60, 3, 18], [86, 3, 26], [108, 3, 34]].forEach(function (s) {
+          var d = wrapDist(x, s[0], W);
+          if (d <= s[1]) base -= s[2]; else if (d <= s[1] + 2 && base > 20) base -= s[2] - 3 * (d - s[1]);
+        });
+        base = Math.round(base);
+      }
+      top[x] = Math.round(Math.max(3, base));
+    }
+    for (x = 0; x < W; x++) for (y = top[x]; y < H; y++) {
+      var n3 = hash2(x, y, 5 + kind), c = (y === top[x]) ? 'a' : (y < top[x] + 3 ? 'b' : (y < top[x] + 12 ? 'c' : 'd'));
+      if (y > top[x] + 1 && n3 > 0.985) c = 'r';
+      else if (y > top[x] + 2 && n3 < 0.04) c = (c === 'b' ? 'c' : 'd');
+      put(g, x, y, c);
+    }
+    if (kind === 0) for (x = 0; x < W; x++) if (hash2(x, 9, 12) < 0.12 && top[x] > 4) wrapPut(g, x, top[x] - 1, 'a');
+    return g;
+  }
+
+  function foreGen(T, kind) {
+    var W = 192, H = 24, g = mk(W, H), x, y, i, R = rng(40 + kind * 7);
+    var base = [];
+    for (x = 0; x < W; x++) base[x] = 2 + Math.round(1.5 + 1.5 * Math.sin(TAU * 7 * x / W + kind) + 1.2 * Math.sin(TAU * 13 * x / W));
+    for (x = 0; x < W; x++) for (y = H - base[x]; y < H; y++) put(g, x, y, y === H - base[x] ? 'a' : 'K');
+    var n = kind === 1 ? 14 : 18;
+    for (i = 0; i < n; i++) {
+      var sx = Math.floor((i + R() * 0.8) * W / n), hgt = (i % 6 === 3) ? 17 + Math.floor(R() * 5) : 6 + Math.floor(R() * 8), lean = (R() - 0.5) * 6, k;
+      for (k = 0; k < hgt; k++) {
+        var t = k / hgt, cx = sx + lean * t * t + (kind === 0 ? Math.sin(t * 5 + i) * 1.2 : 0), w = kind === 1 ? Math.max(0, 3.2 * (1 - t)) : Math.max(0.6, 1.8 * (1 - t));
+        var yy = H - 1 - k;
+        for (var q = -Math.floor(w); q <= Math.floor(w); q++) wrapPut(g, Math.round(cx) + q, yy, (q === -Math.floor(w) && w > 1) ? 'a' : 'K');
+        if (kind === 2 && k > 3 && k % 3 === 0) { wrapPut(g, Math.round(cx) - 2, yy - 1, 'K'); wrapPut(g, Math.round(cx) + 2, yy - 1, 'K'); wrapPut(g, Math.round(cx) - 1, yy, 'K'); wrapPut(g, Math.round(cx) + 1, yy, 'K'); }
+      }
+    }
+    return g;
+  }
+
+  function regLayer(name, w, h, i, build, pal) {
+    if (i === 0) def(name, w, h, [build()], pal);
+    else lazy(name, w, h, 1, function () { return [build()]; }, pal);
+  }
+  [0, 1, 2].forEach(function (i) {
+    var T = TH[i];
+    regLayer('bg_rocks_' + i, 128, 40, i, function () { return rocksGen(T); }, T.rocks);
+    regLayer('bg_ceiling_' + i, 128, 20, i, function () { return ceilingGen(T); }, T.ceil);
+    regLayer('bg_far_' + i, 128, 60, i, function () { return farGen(T, i); }, T.far);
+    regLayer('bg_mid_' + i, 128, 48, i, function () { return midGen(T, i); }, T.mid);
+    regLayer('bg_fore_' + i, 192, 24, i, function () { return foreGen(T, i); }, T.fore);
+  });
+  alias('bg_rocks', 'bg_rocks_0'); alias('bg_ceiling', 'bg_ceiling_0'); alias('bg_far', 'bg_far_0');   // v1 names
 
   /* ================================================================== LOGO ==
-   * "aasssMASTER": chunky 2x-scaled glyphs (lowercase pink, caps golden), 2px
-   * extrusion, hard outline, hairs on the lowercase tops and a little hairy
-   * butt sitting on the M. */
+   * "aasssMASTER": chunky 3x glyphs (lowercase cream, caps golden), 3px extrusion, hard outline, hairs on the
+   * lowercase tops and a big hairy butt sitting on the M.  Frame 1: the butt winks and opens its mouth. */
   (function () {
     var GL = {
       a: ['011110', '111111', '000011', '011111', '111111', '110011', '111111', '011111'],
@@ -983,75 +1526,75 @@
       E: ['111111', '111111', '110000', '110000', '111100', '111100', '110000', '110000', '111111', '111111'],
       R: ['111110', '111111', '110011', '110011', '111111', '111110', '110110', '110011', '110011', '110011']
     };
-    var TEXT = 'aasssMASTER', W = 160, H = 40, BASE = 33, SC = 2, GAP = 2;
-    var PINK = ['L', 'l', 'l', 'p', 'p', 'd', 'd', 'D'];
+    var TEXT = 'aasssMASTER', W = 224, H = 56, BASE = 51, SC = 3, GAP = 1, EX = 3;
+    var LOW = ['W', 'w', 'w', 'w', 's', 's', 'z', 'z'];
     var GOLD = ['u', 'y', 'y', 'y', 'o', 'o', 'o', 'n', 'n', 'k'];
-    var g = mk(W, H), face = mk(W, H), i, x, y, cx0 = 2, pos = [];
+    var g = mk(W, H), face = mk(W, H), i, x, y, cx0 = 5, pos = [];
     for (i = 0; i < TEXT.length; i++) {
       var ch = TEXT[i], gl = GL[ch], gw = gl[0].length;
       pos.push({ ch: ch, x: cx0, gw: gw, gh: gl.length, low: ch === ch.toLowerCase() });
       cx0 += gw * SC + GAP;
     }
-    // extrusion
-    pos.forEach(function (p) {
+    pos.forEach(function (p) {                              // extrusion
       var gl = GL[p.ch], y0 = BASE - p.gh * SC;
       for (y = 0; y < p.gh; y++) for (x = 0; x < p.gw; x++) if (gl[y][x] === '1') {
         for (var dy = 0; dy < SC; dy++) for (var dx = 0; dx < SC; dx++) {
           var X = p.x + x * SC + dx, Y = y0 + y * SC + dy;
-          [[1, 1], [2, 1], [1, 2], [2, 2]].forEach(function (o) { if (at(g, X + o[0], Y + o[1]) === '.') put(g, X + o[0], Y + o[1], 'X'); });
+          for (var k = 1; k <= EX; k++) [[k, k], [k - 1, k], [k, k - 1]].forEach(function (o) { if (at(g, X + o[0], Y + o[1]) === '.') put(g, X + o[0], Y + o[1], 'X'); });
         }
       }
     });
-    // faces
-    pos.forEach(function (p) {
-      var gl = GL[p.ch], y0 = BASE - p.gh * SC, pal = p.low ? PINK : GOLD;
+    pos.forEach(function (p) {                              // faces
+      var gl = GL[p.ch], y0 = BASE - p.gh * SC, pal = p.low ? LOW : GOLD;
       for (y = 0; y < p.gh; y++) for (x = 0; x < p.gw; x++) if (gl[y][x] === '1') {
         for (var dy = 0; dy < SC; dy++) for (var dx = 0; dx < SC; dx++) {
           var X = p.x + x * SC + dx, Y = y0 + y * SC + dy, c = pal[y];
-          // darker right edge of each stroke
-          if (x + 1 >= p.gw || gl[y][x + 1] !== '1') { if (dx === SC - 1) c = p.low ? 'd' : 'o'; }
+          if (x + 1 >= p.gw || gl[y][x + 1] !== '1') { if (dx === SC - 1) c = p.low ? 'z' : 'o'; }
           put(g, X, Y, c); put(face, X, Y, '1');
         }
       }
     });
-    // outline the faces (over extrusion), then the whole silhouette
     var lst = [];
     for (y = 0; y < H; y++) for (x = 0; x < W; x++) if (face[y][x] !== '1') {
       if (at(face, x + 1, y) === '1' || at(face, x - 1, y) === '1' || at(face, x, y + 1) === '1' || at(face, x, y - 1) === '1') lst.push([x, y]);
     }
     lst.forEach(function (q) { g[q[1]][q[0]] = 'K'; });
     outline(g, 'K', false);
-    // hairs on the lowercase tops
     var R = rng(99);
-    pos.forEach(function (p) {
+    pos.forEach(function (p) {                              // hairs on the lowercase tops
       if (!p.low) return;
       var top = BASE - p.gh * SC - 2;
-      [2, 6, 9].forEach(function (ox, k) {
-        var hx = p.x + ox, len = 2 + Math.floor(R() * 3), lean = (R() - 0.5) * 1.2;
+      [2, 7, 12].forEach(function (ox) {
+        var hx = p.x + ox, len = 2 + Math.floor(R() * 4), lean = (R() - 0.5) * 1.4;
         for (var j = 0; j < len; j++) put(g, Math.round(hx + lean * j), top - j, j === len - 1 ? 'H' : 'h');
       });
     });
-    // the butt sitting on the M
-    var M = pos[5];
-    var bt = butt({
-      w: 16, h: 13, seed: 12, cx: 7.5, cw: 1, cy: 8, rx: 3.6, ry: 3.9, sep: 2.2, lDy: 0, rDy: 0,
-      hair: 0.55, hairLong: 0.5, fur: 2, tuft: 2, tuftLen: 3, spot: 0.07,
-      mouth: { dy: 0.6, rx: 0.9, ry: 1.7 }
-    });
-    paste(g, bt, M.x + 7 - 8, 0);
-    def('logo', W, H, [g], { u: '#fff59a', n: '#e05a1a', k: '#a8301c' });
+    var M = pos[5], frames = [];
+    for (var f = 0; f < 2; f++) {
+      var bt = butt({
+        w: 28, h: 24, seed: 12, cx: 13.5, cw: 2, cy: 12.5, rx: 7.2, ry: 8.4, sep: 4.4, lDy: 0, rDy: 0, hair: 0.55, hairLong: 0.5,
+        fur: 10, tuft: 3, tuftLen: 3, spot: 0.07, eyes: 2, wink: f ? 1 : 0,
+        mouth: { dy: 3, rx: f ? 2.3 : 1.3, ry: f ? 3.6 : 2.4, teeth: f ? { n: 6, len: 2, w: 2 } : null, tongue: f ? { rx: 1.8, ry: 1.4, dy: 0.5 } : null }
+      });
+      var gf = g.map(function (r) { return r.slice(); });
+      paste(gf, bt, M.x + 10 - 14, 0);
+      frames.push(gf);
+    }
+    def('logo', W, H, frames, { u: '#fff59a', n: '#e05a1a', k: '#a8301c', z: '#a8946c' });
   })();
 
   /* ============================================================ RASTERISE ==
-   * (all synchronous, at load) */
+   * Eager sprites are rasterised synchronously at load; lazy ones (bosses, themes 1-2,
+   * midboss, boss_gib) on first get/draw/meta/prewarm. */
   function makeCanvas(w, h) {
     var c = document.createElement('canvas');
     c.width = w; c.height = h;
     return c;
   }
-  var canvases = {}, flashCache = {}, shadowCache = {};
-  Object.keys(defs).forEach(function (name) {
+  var canvases = {}, flashCache = {}, shadowCache = {}, metaCache = {};
+  function rasterise(name) {
     var d = defs[name];
+    if (!d.frames) d.frames = toRows(d.build());
     canvases[name] = d.frames.map(function (rws) {
       var c = makeCanvas(d.w, d.h), ctx = c.getContext('2d'), last = null, x, y;
       for (y = 0; y < rws.length; y++) for (x = 0; x < rws[y].length; x++) {
@@ -1063,7 +1606,19 @@
       }
       return c;
     });
-  });
+  }
+  function resolve(name) {                         // follow aliases; returns a defs key or null
+    var d = defs[name], n = 0;
+    while (d && d.alias && n++ < 4) { name = d.alias; d = defs[name]; }
+    return d && !d.alias ? name : null;
+  }
+  function getC(name) {                            // canvases of a sprite (building it if lazy) or null
+    var k = resolve(name);
+    if (!k) return null;
+    if (!canvases[k]) rasterise(k);
+    return canvases[k];
+  }
+  Object.keys(defs).forEach(function (n) { if (!defs[n].alias && !defs[n].build) rasterise(n); });
   var MISSING = (function () {
     var c = makeCanvas(8, 8), x = c.getContext('2d');
     x.fillStyle = '#ff00ff'; x.fillRect(0, 0, 8, 8); return c;
@@ -1077,8 +1632,8 @@
     x.fillRect(0, 0, c.width, c.height);
     return c;
   }
-  function frameIndex(name, frame) {
-    var n = canvases[name].length, f = Math.floor(frame || 0);
+  function frameIndex(n, frame) {
+    var f = Math.floor(frame || 0);
     return ((f % n) + n) % n;
   }
 
@@ -1129,20 +1684,60 @@
     '-': ['.....', '.....', '.....', '#####', '.....', '.....', '.....'],
     '\'': ['..#..', '..#..', '.#...', '.....', '.....', '.....', '.....'],
     '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
+    '+': ['.....', '..#..', '..#..', '#####', '..#..', '..#..', '.....'],
+    '%': ['##..#', '##..#', '...#.', '..#..', '.#...', '#..##', '#..##'],
+    '(': ['...#.', '..#..', '.#...', '.#...', '.#...', '..#..', '...#.'],
+    ')': ['.#...', '..#..', '...#.', '...#.', '...#.', '..#..', '.#...'],
+    '*': ['.....', '#.#.#', '.###.', '#####', '.###.', '#.#.#', '.....'],
+    '<': ['...#.', '..#..', '.#...', '#....', '.#...', '..#..', '...#.'],
+    '>': ['.#...', '..#..', '...#.', '....#', '...#.', '..#..', '.#...'],
+    '=': ['.....', '.....', '#####', '.....', '#####', '.....', '.....'],
+    '_': ['.....', '.....', '.....', '.....', '.....', '.....', '#####'],
+    '"': ['.#.#.', '.#.#.', '.#.#.', '.....', '.....', '.....', '.....'],
     ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....']
   };
-  var glyphCache = {};
-  function glyphCanvas(ch, color, scale) {
-    var key = color + '|' + scale + '|' + ch, c = glyphCache[key];
-    if (c) return c;
-    var rowsG = FONT[ch];
-    c = makeCanvas(5 * scale, 7 * scale);
-    var ctx = c.getContext('2d'), x, y;
-    ctx.fillStyle = color;
-    for (y = 0; y < 7; y++) for (x = 0; x < 5; x++)
-      if (rowsG[y].charAt(x) === '#') ctx.fillRect(x * scale, y * scale, scale, scale);
-    glyphCache[key] = c;
-    return c;
+  var glyphCache = {}, DARK = '#1a0a1f';
+  function hexRGB(c) {
+    var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(c).trim());
+    if (!m) return null;
+    var h = m[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
+  }
+  function mixHex(c, t, k) {                         // mix colour c toward 255 (t=1) / 0 (t=0) by k
+    var rgb = hexRGB(c);
+    if (!rgb) return c;
+    var tg = t ? 255 : 0, o = rgb.map(function (v) { return Math.round(v + (tg - v) * k); });
+    return 'rgb(' + o[0] + ',' + o[1] + ',' + o[2] + ')';
+  }
+  var STYLES = { plain: 1, shadow: 1, outline: 1, banner: 1 };
+  function stampGlyph(ctx, rowsG, color, s, ox, oy, bands) {
+    var x, y;
+    for (y = 0; y < 7; y++) {
+      ctx.fillStyle = bands ? bands[y < 2 ? 0 : (y < 5 ? 1 : 2)] : color;
+      for (x = 0; x < 5; x++) if (rowsG[y].charAt(x) === '#') ctx.fillRect(ox + x * s, oy + y * s, s, s);
+    }
+  }
+  /* returns {c, px, py}: canvas + where the glyph's top-left sits inside it */
+  function glyphCanvas(ch, color, scale, style) {
+    var key = style + '|' + color + '|' + scale + '|' + ch, e = glyphCache[key];
+    if (e) return e;
+    var rowsG = FONT[ch], s = scale, padL = 0, padT = 0, padR = 0, padB = 0;
+    if (style === 'outline') { padL = padT = padR = padB = s; }
+    else if (style === 'shadow') { padR = padB = s; }
+    else if (style === 'banner') { padL = padT = padR = s; padB = 3 * s; }
+    var c = makeCanvas(5 * s + padL + padR, 7 * s + padT + padB), ctx = c.getContext('2d'), dx, dy;
+    if (style === 'outline' || style === 'banner') {
+      for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++)
+        if (dx || dy) stampGlyph(ctx, rowsG, DARK, s, padL + dx * s, padT + dy * s);
+    }
+    if (style === 'shadow') stampGlyph(ctx, rowsG, DARK, s, padL + s, padT + s);
+    if (style === 'banner') {
+      for (dx = -1; dx <= 1; dx++) { stampGlyph(ctx, rowsG, DARK, s, padL + dx * s, padT + 2 * s); stampGlyph(ctx, rowsG, DARK, s, padL + dx * s, padT + s); }
+      stampGlyph(ctx, rowsG, color, s, padL, padT, [mixHex(color, 1, 0.55), color, mixHex(color, 0, 0.4)]);
+    } else stampGlyph(ctx, rowsG, color, s, padL, padT);
+    e = glyphCache[key] = { c: c, px: padL, py: padT };
+    return e;
   }
   function advance(ch, scale) { return (ch === ' ' ? 4 : 6) * scale; }
   function textWidth(str, scale) {
@@ -1151,60 +1746,134 @@
     for (i = 0; i < str.length; i++) w += advance(str.charAt(i), scale);
     return str.length ? w - scale : 0;
   }
-  function text(ctx, str, x, y, color, scale) {
+  function text(ctx, str, x, y, color, scale, style) {
     scale = Math.max(1, Math.round(scale || 1)); color = color || '#fff';
+    style = STYLES[style] ? style : 'plain';
     str = String(str == null ? '' : str).toUpperCase();
     x = Math.round(x); y = Math.round(y);
-    var cx = x, i, ch;
+    var cx = x, i, ch, e;
     for (i = 0; i < str.length; i++) {
       ch = str.charAt(i);
       if (!FONT[ch]) ch = ' ';
-      if (ch !== ' ') ctx.drawImage(glyphCanvas(ch, color, scale), cx, y);
+      if (ch !== ' ') { e = glyphCanvas(ch, color, scale, style); ctx.drawImage(e.c, cx - e.px, y - e.py); }
       cx += advance(ch, scale);
     }
     return textWidth(str, scale);
   }
 
+  /* ===================================================================== META ==
+   * meta(name, frame) -> {hit:{x,y,w,h}, mouth:{x,y,w,h,open}|null, muzzle:{x,y}|null} (px from the
+   * UNFLIPPED sprite's top-left).  hit defaults to the opaque bbox of that frame inset by 2px (1px for
+   * sprites <= 12px); the table below overrides it where the art is not the hitbox. */
+  function bboxOf(d, f) {
+    var rws = d.frames[f], x0 = 999, y0 = 999, x1 = -1, y1 = -1, x, y;
+    for (y = 0; y < rws.length; y++) for (x = 0; x < rws[y].length; x++) if (rws[y].charAt(x) !== '.') {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    return x1 < 0 ? { x: 0, y: 0, w: d.w, h: d.h } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  function R4(x, y, w, h) { return { x: x, y: y, w: w, h: h }; }
+  var BOSS_MOUTH = [
+    [45, 28, 6, 26, false], [42, 25, 13, 32, false], [38, 22, 20, 38, true], [35, 19, 26, 44, true],
+    [45, 28, 6, 26, false], [36, 20, 24, 42, true], [45, 28, 6, 26, false]];
+  function bossMeta(f) {
+    var m = BOSS_MOUTH[f % 7];
+    return { hit: R4(6, 8, 84, 66), mouth: { x: m[0], y: m[1], w: m[2], h: m[3], open: m[4] }, muzzle: { x: 36, y: 41 } };
+  }
+  var MID_MOUTH = [[26, 17, 4, 16, false], [26, 17, 4, 16, false], [22, 14, 12, 22, true], [26, 17, 4, 16, false]];
+  var META = {
+    player: function (f) {
+      var o = [[8, 5, 8, 6, 23, 8], [8, 4, 8, 6, 23, 6], [8, 6, 8, 6, 23, 10]][f % 3];
+      return { hit: R4(o[0], o[1], o[2], o[3]), muzzle: { x: o[4], y: o[5] } };
+    },
+    force: function () { return { hit: R4(1, 1, 14, 14), muzzle: { x: 15, y: 8 } }; },
+    midboss_butt: function (f) {
+      var m = MID_MOUTH[f % 4];
+      return { hit: R4(4, 5, 48, 40), mouth: { x: m[0], y: m[1], w: m[2], h: m[3], open: m[4] }, muzzle: { x: 20, y: 25 } };
+    },
+    butt_turret: function (f) { return { hit: R4(2, 2, 12, 14), muzzle: f > 0 ? { x: 4, y: 5 } : null }; },
+    bullet: function () { return { hit: R4(0, 0, 8, 3) }; },
+    enemy_bullet: function () { return { hit: R4(1, 1, 4, 4) }; }
+  };
+  ['boss_butt', 'boss_crack', 'boss_god'].forEach(function (n) { META[n] = bossMeta; META[n + '_dmg'] = bossMeta; });
+  function meta(name, frame) {
+    var k = resolve(name);
+    if (!k) return null;
+    var d = defs[k];
+    if (!d.frames) getC(k);
+    var f = frameIndex(d.frames.length, frame), ck = k + '#' + f, m = metaCache[ck];
+    if (m) return m;
+    var o = META[k] ? META[k](f) : {}, hit = o.hit;
+    if (!hit) {
+      var b = bboxOf(d, f), ins = (d.w <= 12 || d.h <= 12) ? 1 : 2;
+      hit = R4(b.x + ins, b.y + ins, Math.max(1, b.w - 2 * ins), Math.max(1, b.h - 2 * ins));
+    }
+    m = metaCache[ck] = { hit: hit, mouth: o.mouth || null, muzzle: o.muzzle || null };
+    return m;
+  }
+
+  /* =================================================================== THEMES ==
+   * theme(i) -> names of the five parallax layers for stage theme i (mod themeCount) + a fog colour. */
+  var THEME_FOG = ['#3a1a5a', '#5a1a30', '#1f3a2a'];
+  var themeCount = 3;
+  function theme(i) {
+    i = ((Math.floor(i) || 0) % themeCount + themeCount) % themeCount;
+    return { far: 'bg_far_' + i, mid: 'bg_mid_' + i, ceiling: 'bg_ceiling_' + i, ground: 'bg_rocks_' + i, fore: 'bg_fore_' + i, fog: THEME_FOG[i] };
+  }
+
   /* ==================================================================== API */
+  function xform(ctx, src, x, y, flipX, flipY) {
+    if (flipX || flipY) {
+      ctx.save();
+      ctx.translate(x + (flipX ? src.width : 0), y + (flipY ? src.height : 0));
+      ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+      ctx.drawImage(src, 0, 0);
+      ctx.restore();
+    } else ctx.drawImage(src, x, y);
+  }
   var Sprites = {
     get: function (name, frame) {
-      if (!canvases[name]) return MISSING;
-      return canvases[name][frameIndex(name, frame)];
+      var cs = getC(name);
+      return cs ? cs[frameIndex(cs.length, frame)] : MISSING;
     },
-    frames: function (name) { return canvases[name] ? canvases[name].length : 1; },
+    frames: function (name) {
+      var k = resolve(name);
+      return k ? (defs[k].frames ? defs[k].frames.length : defs[k].nf) : 1;
+    },
     size: function (name) {
-      var d = defs[name];
+      var k = resolve(name), d = k && defs[k];
       return d ? { w: d.w, h: d.h } : { w: 8, h: 8 };
     },
     draw: function (ctx, name, x, y, opts) {
       opts = opts || {};
-      var src;
-      if (!canvases[name]) src = MISSING;
+      var cs = getC(name), src;
+      if (!cs) src = MISSING;
       else {
-        var fi = frameIndex(name, opts.frame);
+        var fi = frameIndex(cs.length, opts.frame);
         if (opts.flash) {
-          var k = name + '#' + fi;
-          src = flashCache[k] || (flashCache[k] = silhouette(canvases[name][fi], '#ffffff'));
-        } else src = canvases[name][fi];
+          var k = resolve(name) + '#' + fi;
+          src = flashCache[k] || (flashCache[k] = silhouette(cs[fi], '#ffffff'));
+        } else src = cs[fi];
       }
       x = Math.round(x); y = Math.round(y);
-      if (opts.flipX) {
-        ctx.save();
-        ctx.translate(x + src.width, y);
-        ctx.scale(-1, 1);
-        ctx.drawImage(src, 0, 0);
-        ctx.restore();
-      } else ctx.drawImage(src, x, y);
+      if (opts.alpha != null && opts.alpha < 1) {
+        var pa = ctx.globalAlpha;
+        ctx.globalAlpha = pa * Math.max(0, opts.alpha);
+        xform(ctx, src, x, y, opts.flipX, opts.flipY);
+        ctx.globalAlpha = pa;
+      } else xform(ctx, src, x, y, opts.flipX, opts.flipY);
     },
     drawShadow: function (ctx, name, x, y, opts) {
       opts = opts || {};
-      if (!canvases[name]) return;
-      var fi = frameIndex(name, opts.frame), k = name + '#' + fi;
-      var src = shadowCache[k] || (shadowCache[k] = silhouette(canvases[name][fi], '#000000'));
-      var dh = Math.max(1, Math.round(src.height * 0.4));
+      var cs = getC(name);
+      if (!cs) return;
+      var fi = frameIndex(cs.length, opts.frame), k = resolve(name) + '#' + fi;
+      var src = shadowCache[k] || (shadowCache[k] = silhouette(cs[fi], '#000000'));
+      var sq = opts.squash != null ? opts.squash : 0.4;
+      var dh = Math.max(1, Math.round(src.height * sq));
       x = Math.round(x); y = Math.round(y);
       var prev = ctx.globalAlpha;
-      ctx.globalAlpha = prev * 0.45;
+      ctx.globalAlpha = prev * 0.45 * (opts.alpha != null ? opts.alpha : 1);
       if (opts.flipX) {
         ctx.save();
         ctx.translate(x + src.width, y);
@@ -1214,11 +1883,49 @@
       } else ctx.drawImage(src, 0, 0, src.width, src.height, x, y, src.width, dh);
       ctx.globalAlpha = prev;
     },
+    meta: meta,
+    theme: theme,
+    themeCount: themeCount,
+    prewarm: function (names) {
+      (names || []).forEach(function (n) { try { getC(n); meta(n, 0); } catch (e) { /* ignore */ } });
+    },
     text: text,
     textWidth: textWidth,
     names: function () { return Object.keys(defs); },
-    _defs: defs,            // string-array source of every sprite (for tooling/tests)
+    _defs: defs,            // string-array source of every sprite (lazy ones have frames === null until built)
     _font: FONT
+  };
+
+  /* ---- self check (C8): every shipped name with its exact size and frame count.  Returns problems[]. */
+  var SPEC = {
+    player: [24, 16, 3], thruster: [8, 8, 4], option: [8, 8, 4], shield: [32, 24, 2], bullet: [8, 3, 1], bullet_opt: [6, 3, 1],
+    bullet_charged: [24, 10, 1], beam_t1: [24, 10, 2], beam_t2: [40, 16, 2], beam_t3: [64, 24, 2], bullet_spread: [6, 6, 1],
+    bullet_wave: [8, 6, 2], bullet_laser: [16, 3, 1], enemy_bullet: [6, 6, 2], hair_ball: [10, 10, 2],
+    butt_small: [16, 16, 4], butt_mid: [24, 24, 4], butt_charger: [20, 16, 3], butt_spitter: [24, 20, 5], alien_eye: [16, 16, 4],
+    alien_squid: [20, 24, 4], butt_armored: [24, 24, 3], gas_cloud: [20, 16, 4], tooth_mine: [14, 14, 3], butt_turret: [16, 16, 3],
+    midboss_butt: [56, 48, 4], boss_butt: [96, 80, 7], boss_butt_dmg: [96, 80, 7], boss_crack: [96, 80, 7], boss_crack_dmg: [96, 80, 7],
+    boss_god: [96, 80, 7], boss_god_dmg: [96, 80, 7], boss_gib: [64, 64, 8], explosion: [32, 32, 6], explosion_small: [16, 16, 4],
+    force: [16, 16, 6], charge_orb: [16, 16, 6], muzzle: [8, 8, 3], bullet_hit: [8, 8, 3], player_die: [32, 32, 6], shield_pop: [32, 24, 4],
+    pu_flash: [24, 24, 5], fart_puff: [12, 12, 5], smoke: [8, 8, 4], icon_life: [12, 8, 1],
+    pu_power: [12, 12, 2], pu_speed: [12, 12, 2], pu_shield: [12, 12, 2], pu_option: [12, 12, 2],
+    pu_force: [12, 12, 2], pu_spread: [12, 12, 2], pu_laser: [12, 12, 2], pu_wave: [12, 12, 2], hair_tuft: [8, 8, 3],
+    bg_rocks: [128, 40, 1], bg_ceiling: [128, 20, 1], bg_far: [128, 60, 1], logo: [224, 56, 2]
+  };
+  [0, 1, 2].forEach(function (i) {
+    SPEC['bg_far_' + i] = [128, 60, 1]; SPEC['bg_mid_' + i] = [128, 48, 1]; SPEC['bg_rocks_' + i] = [128, 40, 1];
+    SPEC['bg_ceiling_' + i] = [128, 20, 1]; SPEC['bg_fore_' + i] = [192, 24, 1];
+  });
+  Sprites._spec = SPEC;
+  Sprites._selfCheck = function () {
+    var bad = [];
+    Object.keys(SPEC).forEach(function (n) {
+      var sp = SPEC[n], z = Sprites.size(n), nf = Sprites.frames(n), cs = getC(n);
+      if (!cs) { bad.push(n + ': missing'); return; }
+      if (z.w !== sp[0] || z.h !== sp[1]) bad.push(n + ': size ' + z.w + 'x' + z.h + ' != ' + sp[0] + 'x' + sp[1]);
+      if (nf !== sp[2] || cs.length !== sp[2]) bad.push(n + ': frames ' + nf + '/' + cs.length + ' != ' + sp[2]);
+      if (cs[0].width !== sp[0] || cs[0].height !== sp[1]) bad.push(n + ': canvas size');
+    });
+    return bad;
   };
 
   global.Sprites = Sprites;
