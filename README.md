@@ -1,5 +1,8 @@
 # aasssMaster
 
+- **aasssMaster**, a vertical shoot-'em-up with a hairy-butt alien theme. Every sprite is drawn in code and every sound
+  is synthesised in the browser.
+
 A pixel-art horizontal shoot-'em-up in the spirit of R-Type, with a comedic twist:
 the enemies are hairy butt-aliens, and they want to swallow your ship whole.
 
