@@ -65,12 +65,36 @@ No install, no build step, no npm.
 To check the level data, open the browser console and run `Levels.validate()`.
 It returns `{errors, warnings}`. Errors mean a broken stage. Warnings are design notes.
 
+## The studio (synths, sequencer, processors)
+
+`studio/index.html` is a separate page that recreates a Guidance-style electro track
+(126 BPM, B) entirely with Web Audio: one synth per element (kick, sub, bass, chord stab,
+clap, open and closed hats, shaker, percussion, lead, pad, riser, impact), a 16-step
+sequencer with a 200-bar arrangement, and a processor rack (sidechain ducking, filters,
+saturation, tempo-synced ping-pong delay, reverb, EQ, compressor, limiter, stereo width).
+
+Serve the folder over HTTP and open http://localhost:8000/studio/ . Press Play, click a
+section to jump to it, tweak any synth or processor parameter live, and export a section
+or the whole song as a WAV file. The design notes and the analysis of the reference track
+are in `docs/superpowers/specs/2026-10-21-guidance-studio-design.md`.
+
+Self-check (no browser needed): `node studio/selfcheck.js`.
+
 ## File layout
 
 ```
 index.html        page shell, loads the scripts in order
 CONTRACT.md       the module contract between the source files (v2)
 team/             the four-role design discussion (PROTOCOL.md, DIRECTOR-RULINGS.md, round files)
+studio/
+  index.html      the studio page (transport, sections, channel strips, processor rack, WAV export)
+  core.js         shared helpers: AudioParam scheduling, notes and chords, noise, impulse responses
+  synths.js       global Synths: one instrument per element of the track
+  processors.js   global Processors: effect units, chain(), channel strips, the master chain
+  sequencer.js    global Sequencer: transport, patterns, arrangement, mixer, offline render
+  song.js         global Song: the Guidance-style patterns, chords, melody and arrangement
+  studio.js       the page logic
+  selfcheck.js    node smoke test with a fake AudioContext
 js/
   sprites.js      pixel art, every sprite drawn procedurally from character grids
   sfx.js          sound effects and chiptune music, synthesised with Web Audio

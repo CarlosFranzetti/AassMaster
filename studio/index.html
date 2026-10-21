@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aasssMaster studio</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0b10; --panel:#15151e; --line:#2a2a3a; --fg:#d8d8e6; --dim:#8a8aa0; --acc:#ff5fa2; --acc2:#5fd8ff; --on:#7cff8a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--fg); font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  header { position:sticky; top:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line); padding:10px 14px; display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; }
+  h1 { font-size:15px; margin:0; color:var(--acc); letter-spacing:1px; }
+  h1 small { color:var(--dim); font-weight:normal; letter-spacing:0; margin-left:8px; }
+  button { background:#22222e; color:var(--fg); border:1px solid var(--line); border-radius:4px; padding:5px 10px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--acc2); }
+  button.on { background:var(--acc); color:#000; border-color:var(--acc); }
+  button.sm { padding:2px 7px; font-size:11px; }
+  button.solo.on { background:var(--acc2); border-color:var(--acc2); }
+  input[type=range] { width:110px; vertical-align:middle; accent-color:var(--acc2); }
+  input[type=number] { width:64px; background:#0e0e14; color:var(--fg); border:1px solid var(--line); border-radius:4px; padding:3px 6px; font:inherit; }
+  label { color:var(--dim); }
+  .pos { font-size:14px; min-width:220px; }
+  .pos b { color:var(--on); }
+  #sections { display:flex; flex-wrap:wrap; gap:6px; padding:10px 14px; border-bottom:1px solid var(--line); align-items:center; }
+  #sections button.cur { border-color:var(--on); color:var(--on); }
+  main { padding:12px 14px; display:grid; gap:12px; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+  .strip { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  .strip.muted { opacity:.45; }
+  .strip h2 { font-size:13px; margin:0 0 6px; display:flex; align-items:center; gap:8px; }
+  .strip h2 .type { color:var(--dim); font-weight:normal; }
+  .strip h2 .sp { flex:1; }
+  .steps { display:grid; grid-template-columns:repeat(16, 1fr); gap:2px; margin:6px 0; }
+  .steps i { display:block; height:14px; border-radius:2px; background:#1e1e2a; border:1px solid #2a2a3a; }
+  .steps i.hit { background:#3b3b55; border-color:#55557a; }
+  .steps i.acc { background:#55557a; border-color:#8080b0; }
+  .steps i.now { outline:2px solid var(--on); }
+  .steps i.now.hit, .steps i.now.acc { background:var(--on); }
+  .row { display:flex; align-items:center; gap:6px; margin:3px 0; flex-wrap:wrap; }
+  .row label { min-width:62px; font-size:11px; }
+  .row .v { color:var(--acc2); min-width:52px; font-size:11px; text-align:right; }
+  details { margin-top:4px; }
+  summary { cursor:pointer; color:var(--dim); font-size:11px; }
+  .params { margin-top:4px; }
+  .rack { grid-column: 1 / -1; }
+  .rack .units { display:grid; gap:10px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .unit { border:1px solid var(--line); border-radius:4px; padding:6px 8px; }
+  .unit h3 { margin:0 0 4px; font-size:12px; color:var(--acc2); }
+  #meter { width:120px; height:10px; background:#1a1a24; border:1px solid var(--line); border-radius:3px; overflow:hidden; }
+  #meter i { display:block; height:100%; width:0; background:linear-gradient(90deg, var(--on), #ffe45f 70%, var(--acc)); }
+  #status { color:var(--dim); font-size:11px; }
+  footer { padding:10px 14px 30px; color:var(--dim); font-size:11px; line-height:1.6; }
+  footer code { color:var(--fg); }
+</style>
+</head>
+<body>
+<header>
+  <h1>aasssMaster STUDIO <small>Guidance-style electro: 126 BPM, B</small></h1>
+  <button id="play">▶ Play</button>
+  <button id="stop">■ Stop</button>
+  <label>BPM <input id="bpm" type="number" min="60" max="200" step="0.5" value="126"></label>
+  <label>swing <input id="swing" type="range" min="0" max="1" step="0.01" value="0.06"> <span id="swingv">0.06</span></label>
+  <span class="pos">bar <b id="bar">1</b> · step <b id="step">1</b> · <b id="sec">intro</b></span>
+  <span id="meter"><i></i></span>
+  <button id="export-section" class="sm">Export section WAV</button>
+  <button id="export-song" class="sm">Export song WAV</button>
+  <span id="status">tap Play to start the audio engine</span>
+</header>
+<div id="sections"><label>sections:</label></div>
+<main id="tracks"></main>
+<footer>
+  Each strip is one synth from <code>studio/synths.js</code>, run by <code>studio/sequencer.js</code> through the processors in <code>studio/processors.js</code>.
+  Patterns, chords and the arrangement live in <code>studio/song.js</code>. Click a section to jump to it; tick <em>loop</em> to stay on it.
+  Serve the repository over HTTP (<code>python3 -m http.server</code>) and open <code>/studio/</code>.
+</footer>
+<script src="core.js"></script>
+<script src="synths.js"></script>
+<script src="processors.js"></script>
+<script src="sequencer.js"></script>
+<script src="song.js"></script>
+<script src="studio.js"></script>
+</body>
+</html>
