@@ -1238,7 +1238,10 @@ function bindInput() {
  * 12. SCALING
  * ====================================================================== */
 function resize() {
-  var iw = window.innerWidth || W, ih = window.innerHeight || H;
+  // Measure the wrapper (it carries the phone safe-area padding), not the raw window.
+  var wrapEl = canvas.parentElement;
+  var iw = (wrapEl && wrapEl.clientWidth) || window.innerWidth || W;
+  var ih = (wrapEl && wrapEl.clientHeight) || window.innerHeight || H;
   var s = Math.min(iw / W, ih / H);
   var si = Math.floor(s);
   // Integer scale keeps pixels crisp, but on phones it can leave half the screen black.
