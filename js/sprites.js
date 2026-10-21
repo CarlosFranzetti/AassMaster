@@ -865,7 +865,8 @@
       B: ['XX.', 'X.X', 'XX.', 'X.X', 'XX.'], O: ['XXX', 'X.X', 'X.X', 'X.X', 'XXX'],
       // new icons (v2): spread fan, laser bar, wave "~", force pod ring
       '3': ['...XX', '.XX..', 'XXXXX', '.XX..', '...XX'], L: ['.X....', '.XXXXX', 'XXXXXX', '.XXXXX', '.X....'],
-      '~': ['......', '.XX..X', 'X..XX.', '......'], F: ['.XXX.', 'X...X', 'X.X.X', 'X...X', '.XXX.']
+      '~': ['......', '.XX..X', 'X..XX.', '......'], F: ['.XXX.', 'X...X', 'X.X.X', 'X...X', '.XXX.'],
+      H: ['.X.X.', 'XXXXX', 'XXXXX', '.XXX.', '..X..']
     };
     function cap(letter, pal, f) {
       var g = mk(12, 12), x, y;
@@ -894,7 +895,8 @@
       pu_force: ['F', { a: '#fff0a0', b: '#e8b410', c: '#7a5200' }],
       pu_spread: ['3', { a: '#e8b0ff', b: '#a040e0', c: '#521a8a' }],
       pu_laser: ['L', { a: '#f4f8ff', b: '#8294b8', c: '#3a4668' }],
-      pu_wave: ['~', { a: '#a0fff0', b: '#18b8b0', c: '#0a6068' }]
+      pu_wave: ['~', { a: '#a0fff0', b: '#18b8b0', c: '#0a6068' }],
+      pu_life: ['H', { a: '#fff4a8', b: '#f0c020', c: '#8a5a00' }]
     };
     Object.keys(spec).forEach(function (n) {
       def(n, 12, 12, [cap(spec[n][0], spec[n][1], 0), cap(spec[n][0], spec[n][1], 1)], spec[n][1]);
@@ -1264,6 +1266,28 @@
       return g;
     });
   });
+
+  /* ---- IF-TIME extras: gib 4x4 (flesh / dark / metal / hair chunks), title_planet 128x112 (butt-shaped planet) */
+  def('gib', 4, 4, [[
+    '.KK.', 'KpLK', 'KdpK', '.KK.'
+  ], [
+    '.KK.', 'KdDK', 'KDdK', '.KK.'
+  ], [
+    '.KK.', 'KWbK', 'KbBK', '.KK.'
+  ], [
+    'hHh.', 'HhHh', '.hHh', 'h.h.'
+  ]], { w: '#eef4ff', b: '#6478a8', B: '#3a4a78' });
+  lazy('title_planet', 128, 112, 1, function () {
+    var g = butt({
+      w: 128, h: 112, seed: 5, cx: 64, cw: 3, cy: 56, rx: 40, ry: 46, sep: 21, hair: 0.8, hairLong: 0.6, hairMax: 1, fur: 90,
+      tuft: 8, tuftLen: 5, spot: 0.05, dither: true, outline2: true
+    }), R = rng(6);
+    for (var i = 0; i < 9; i++) {                                     // craters
+      var ci = i % 2, cxx = ci ? 64 + 8 + R() * 44 : 64 - 8 - R() * 44, cyy = 18 + R() * 76, rr = 2 + R() * 4;
+      ell(g, cxx, cyy, rr * 1.2, rr, function (x, y, u, v) { var cur = at(g, x, y); if ('pLldD'.indexOf(cur) < 0) return null; return (-u * 0.5 - v * 0.7) > 0.3 ? 'p' : ((u * u + v * v) > 0.55 ? 'D' : 'd'); });
+    }
+    return [g];
+  }, { p: '#d08ac8', l: '#ecbcec', L: '#fff0ff', d: '#8a4a90', D: '#5a2a6a' });
 
   /* ============================================ TILEABLE BACKGROUNDS =======
    * Five layers x three themes (0 flesh/violet, 1 lava-red crack, 2 green/gold temple), registered as
@@ -1908,7 +1932,7 @@
     force: [16, 16, 6], charge_orb: [16, 16, 6], muzzle: [8, 8, 3], bullet_hit: [8, 8, 3], player_die: [32, 32, 6], shield_pop: [32, 24, 4],
     pu_flash: [24, 24, 5], fart_puff: [12, 12, 5], smoke: [8, 8, 4], icon_life: [12, 8, 1],
     pu_power: [12, 12, 2], pu_speed: [12, 12, 2], pu_shield: [12, 12, 2], pu_option: [12, 12, 2],
-    pu_force: [12, 12, 2], pu_spread: [12, 12, 2], pu_laser: [12, 12, 2], pu_wave: [12, 12, 2], hair_tuft: [8, 8, 3],
+    pu_force: [12, 12, 2], pu_spread: [12, 12, 2], pu_laser: [12, 12, 2], pu_wave: [12, 12, 2], hair_tuft: [8, 8, 3], gib: [4, 4, 4], pu_life: [12, 12, 2], title_planet: [128, 112, 1],
     bg_rocks: [128, 40, 1], bg_ceiling: [128, 20, 1], bg_far: [128, 60, 1], logo: [224, 56, 2]
   };
   [0, 1, 2].forEach(function (i) {
