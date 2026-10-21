@@ -101,15 +101,23 @@
   };
 
   var defs = {};
-  function def(name, w, h, frames, extra) {
-    var rs = frames.map(function (f) {
-      return (typeof f[0] === 'string') ? f.slice() : rows(f);
-    });
+  function mkpal(extra) {
     var pal = {}, k;
     for (k in PAL) pal[k] = PAL[k];
     if (extra) for (k in extra) pal[k] = extra[k];
-    defs[name] = { w: w, h: h, frames: rs, pal: pal };
+    return pal;
   }
+  function toRows(frames) {
+    return frames.map(function (f) { return (typeof f[0] === 'string') ? f.slice() : rows(f); });
+  }
+  function def(name, w, h, frames, extra) {
+    defs[name] = { w: w, h: h, frames: toRows(frames), pal: mkpal(extra) };
+  }
+  /* lazily built sprite: size / frame count are declared, pixels are made on first get/draw/meta */
+  function lazy(name, w, h, nf, builder, extra) {
+    defs[name] = { w: w, h: h, nf: nf, build: builder, frames: null, pal: mkpal(extra) };
+  }
+  function alias(name, target) { defs[name] = { alias: target }; }
 
   /* =============================================================== PLAYER ==
    * R-9 style needle fighter. Frame 0 is built from a column profile, frames 1
@@ -227,44 +235,93 @@
     });
   })();
 
-  /* =========================================================== PROJECTILES == */
+  /* =========================================================== PROJECTILES ==
+   * Rule of thumb: ours are cool & thin (white/yellow/cyan/green), HOSTILE ones are
+   * the brightest, fattest things on screen (white core, hot ring, dark outline). */
   def('bullet', 8, 3, [[
-    '.oYYYYo.',
-    'WWWWWWWW',
-    '.oYYYYo.'
+    '.yYYYYy.',
+    'oWWWWWWW',
+    '.yYYYYy.'
+  ]]);
+  def('bullet_opt', 6, 3, [[
+    '.oyyo.',
+    'oYWWYo',
+    '.oyyo.'
   ]]);
 
-  (function () {
-    var fr = [];
-    for (var f = 0; f < 2; f++) {
-      var g = mk(24, 8), x, y;
-      for (x = 0; x < 24; x++) {
-        var th = x < 6 ? 1.6 + x * 0.5 : (x < 16 ? 4.6 : 4.6 - (x - 16) * 0.48);
-        if (x < 12) th += ((x + f) % 2 ? 0.45 : -0.45) * (f ? 1.3 : 0.8);
-        th = Math.max(1, Math.min(4, th));
-        for (y = 0; y < 8; y++) {
-          var dy = Math.abs(y + 0.5 - 4);
-          if (dy > th) continue;
-          var a = dy / th;
-          put(g, x, y, a < 0.3 ? 'W' : a < 0.55 ? 'c' : a < 0.82 ? 'z' : 'n');
-        }
+  /* beams: tail ramps up, plateau, round head on the right.  tier 3 is crackling. */
+  function beamFrame(w, h, f, tier) {
+    var g = mk(w, h), x, y, cy = h / 2, tail = Math.max(4, Math.round(w * 0.3)), head = Math.min(6, Math.round(h * 0.4));
+    var R = rng(300 + tier * 17 + f * 5);
+    for (x = 0; x < w; x++) {
+      var th;
+      if (x < tail) th = 0.35 + (cy - 0.35) * (x / tail);
+      else th = cy;
+      if (x > w - 1 - head) { var q = (x - (w - 1 - head)) / head; th *= Math.sqrt(Math.max(0, 1 - q * q)); }
+      th = Math.max(0.6, th - 0.3);
+      th += ((x + f) % 3 === 0 ? 0.55 : ((x + f) % 3 === 1 ? -0.35 : 0)) * (x < w * 0.75 ? (tier > 1 ? 1.3 : 0.8) : 0.2);
+      th = Math.max(0.6, Math.min(cy, th));
+      for (y = 0; y < h; y++) {
+        var dy = Math.abs(y + 0.5 - cy);
+        if (dy > th) continue;
+        var a = dy / th;
+        put(g, x, y, a < 0.34 ? 'W' : a < 0.6 ? 'c' : a < 0.85 ? 'z' : 'n');
       }
-      if (f) { put(g, 0, 2, 'c'); put(g, 1, 6, 'c'); put(g, 14, 0, 'z'); put(g, 17, 7, 'z'); }
-      else { put(g, 0, 5, 'c'); put(g, 1, 1, 'c'); put(g, 11, 7, 'z'); put(g, 15, 0, 'z'); }
-      fr.push(g);
     }
-    def('bullet_charged', 24, 8, fr, { c: '#6ee8ff', z: '#2a8cff', n: '#18287c' });
-  })();
+    var n = tier === 3 ? 14 : (tier === 2 ? 6 : 3), i;
+    for (i = 0; i < n; i++) {                              // sparks / crackle around the beam
+      var sx = Math.floor(R() * w * 0.85), sy = Math.floor(R() * h);
+      if (at(g, sx, sy) === '.') put(g, sx, sy, R() < 0.5 ? 'c' : 'z');
+    }
+    if (tier === 3) for (i = 0; i < 6; i++) {              // white lightning flecks on the body
+      var lx = 6 + Math.floor(R() * (w - 14)), ly = Math.floor(cy + (R() - 0.5) * h * 0.55);
+      put(g, lx, ly, 'W'); put(g, lx + 1, ly + (R() < 0.5 ? 1 : -1), 'W');
+    }
+    for (y = 0; y < h; y++) if (at(g, w - 1, y) !== '.') put(g, w - 1, y, 'W');
+    return g;
+  }
+  var BEAMPAL = { c: '#6ee8ff', z: '#2a8cff', n: '#18287c' };
+  def('beam_t1', 24, 10, [beamFrame(24, 10, 0, 1), beamFrame(24, 10, 1, 1)], BEAMPAL);
+  def('beam_t2', 40, 16, [beamFrame(40, 16, 0, 2), beamFrame(40, 16, 1, 2)], { c: '#7ff0ff', z: '#3a8cff', n: '#1a2a8c' });
+  def('beam_t3', 64, 24, [beamFrame(64, 24, 0, 3), beamFrame(64, 24, 1, 3)], { c: '#b8f8ff', z: '#6a9cff', n: '#3a2aa8' });
+  def('bullet_charged', 24, 10, [beamFrame(24, 10, 0, 1)], BEAMPAL);    // v1 name: alias of beam_t1 frame 0
 
+  /* our alternative weapons */
+  (function () {
+    var g = mk(6, 6);
+    ell(g, 3, 3, 3, 3, 'z'); ell(g, 3, 3, 2.2, 2.2, 'c'); ell(g, 3, 3, 1.1, 1.1, 'W');
+    def('bullet_spread', 6, 6, [g], { z: '#3a9a1a', c: '#b8ff5a' });
+  })();
+  def('bullet_wave', 8, 6, [[
+    '..cWWc..',
+    '.cWWWWc.',
+    'zcWWWWcz',
+    'zccWWccz',
+    '.zzccZz.',
+    '..zzzz..'
+  ], [
+    '..zzzz..',
+    '.zccccz.',
+    'zcWWWWcz',
+    'zcWWWWcz',
+    '.cWWWWc.',
+    '..cWWc..'
+  ]], { z: '#18a0a0', c: '#60f0d8', Z: '#18a0a0' });
+  def('bullet_laser', 16, 3, [[
+    '.vvvvvvvvvvvvvv.',
+    'WWWWWWWWWWWWWWWW',
+    '.vvvvvvvvvvvvvv.'
+  ]], { v: '#b89cff' });
+
+  /* hostile projectiles */
   (function () {
     var fr = [];
     for (var f = 0; f < 2; f++) {
       var g = mk(6, 6);
-      ell(g, 3, 3 + (f ? 0.2 : 0), 3, f ? 2.5 : 3, 'K');
-      ell(g, 3, 3 + (f ? 0.2 : 0), 2.15, f ? 1.7 : 2.15, function (x, y, u, v) {
-        var l = -u * 0.6 - v * 0.8; return l > 0.45 ? 'l' : (l < -0.3 ? 'd' : 'p');
-      });
-      put(g, f ? 3 : 2, f ? 2 : 2, 'L');
+      ell(g, 3, 3, 3, 3, 'K');
+      ell(g, 3, 3, 2.35, 2.35, function (x, y, u, v) { var l = -u * 0.6 - v * 0.8; return f ? (l > 0.2 ? 'Y' : 'o') : (l > 0.3 ? 'o' : 'r'); });
+      ell(g, 3, 3, 1.1, 1.1, f ? 'Y' : 'W');
+      put(g, f ? 3 : 2, f ? 3 : 2, 'W');
       fr.push(g);
     }
     def('enemy_bullet', 6, 6, fr);
@@ -279,14 +336,14 @@
         line(g, 4.5, 4.5, 4.5 + Math.cos(a) * len, 4.5 + Math.sin(a) * len, 'h');
         put(g, 4.5 + Math.cos(a) * len, 4.5 + Math.sin(a) * len, 'H');
       }
-      ell(g, 5, 5, 3.6, 3.6, 'K');
+      ell(g, 5, 5, 3.6, 3.6, 'Z');                         // bright rim so it pops on brown ground
       ell(g, 5, 5, 3, 3, function (x, y, u, v) {
         var l = -u * 0.6 - v * 0.8; return l > 0.3 ? 'H' : (l < -0.35 ? 'h' : ((x + y + f) % 3 === 0 ? 'h' : 'H'));
       });
       put(g, 4, 4, 'W');
       fr.push(g);
     }
-    def('hair_ball', 10, 10, fr);
+    def('hair_ball', 10, 10, fr, { h: '#a8682c', H: '#f0bc70', Z: '#fff0c0' });
   })();
 
   /* ================================================================ BUTTS ==
@@ -449,6 +506,11 @@
     if (o.eyes) {
       C.forEach(function (c, ci) {
         var ex = c.x + (ci ? -0.6 : 0.6), ey = c.y - ry * 0.28, inward = ci ? -1 : 1;
+        if (o.wink === ci + 1) {                            // winking: a happy closed-eye arc
+          line(g, ex - 2.6, ey + 0.4, ex, ey - 0.8, 'K'); line(g, ex, ey - 0.8, ex + 2.6, ey + 0.4, 'K');
+          line(g, ex - 2.6, ey + 1.4, ex, ey, 'K'); line(g, ex, ey, ex + 2.6, ey + 1.4, 'K');
+          return;
+        }
         ell(g, ex, ey, o.eyes + 1.1, o.eyes * 0.8 + 1.1, 'K');
         ell(g, ex, ey, o.eyes, o.eyes * 0.8, 'e');
         rect(g, Math.floor(ex + inward * 0.9 - 0.5 + (ci ? 0 : 0)), Math.floor(ey - 0.2), 2, 2, 'K');
@@ -459,6 +521,7 @@
 
     // ---- damage (boss only): bruises + cracks
     if (o.dmg) {
+      var RD = rng(o.dmgSeed || 91);
       var bru = [[-0.3, -0.2, 7, 9], [0.45, 0.2, 6, 8], [-0.1, 0.55, 6, 5], [0.2, -0.55, 5, 6], [-0.55, 0.35, 5, 7]];
       bru.forEach(function (b, bi) {
         var c = C[bi % 2];
@@ -470,15 +533,15 @@
         });
       });
       for (i = 0; i < 6; i++) {
-        var cI = C[i % 2], px0 = cI.x + (R() * 2 - 1) * rx * 0.6, py0 = cI.y + (R() * 2 - 1) * ry * 0.6;
-        var ddx = R() < 0.5 ? -1 : 1, ddy = R() < 0.5 ? -1 : 1, n = 12 + Math.floor(R() * 14);
+        var cI = C[i % 2], px0 = cI.x + (RD() * 2 - 1) * rx * 0.6, py0 = cI.y + (RD() * 2 - 1) * ry * 0.6;
+        var ddx = RD() < 0.5 ? -1 : 1, ddy = RD() < 0.5 ? -1 : 1, n = 12 + Math.floor(RD() * 14);
         for (var s = 0; s < n; s++) {
           if (inSet(at(g, px0, py0), 'plLdDuU')) { put(g, px0, py0, 'K'); if (inSet(at(g, px0 + 1, py0), 'plLdDuU')) put(g, px0 + 1, py0, 'K'); }
-          px0 += R() < 0.65 ? ddx : 0; py0 += (R() < 0.65 ? ddy : 0) + (R() < 0.18 ? -ddy : 0);
+          px0 += RD() < 0.65 ? ddx : 0; py0 += (RD() < 0.65 ? ddy : 0) + (RD() < 0.18 ? -ddy : 0);
         }
       }
       for (i = 0; i < 6; i++) {                             // blood/sweat flecks
-        var bxp = cx + (R() * 2 - 1) * (sep + rx * 0.8), byp = cy + (R() * 2 - 1) * ry * 0.8;
+        var bxp = cx + (RD() * 2 - 1) * (sep + rx * 0.8), byp = cy + (RD() * 2 - 1) * ry * 0.8;
         if (inSet(at(g, bxp, byp), 'plLdDuU')) { put(g, bxp, byp, 'r'); put(g, bxp, byp + 1, 'r'); }
       }
     }
@@ -513,7 +576,7 @@
         mouth: { dy: 3.4, rx: p.mr, ry: p.my, teeth: { n: 6, len: 2, w: 2 }, lipHair: f >= 2 ? 6 : 4 }
       });
     });
-    def('butt_mid', 24, 24, fr);
+    def('butt_mid', 24, 24, fr, { p: '#f27468', l: '#ff9c8e', L: '#ffd8cc', d: '#c43a4c', D: '#82203c' });   // flushed & furious
   })();
 
   /* ---- butt_spitter 24x20 (frames 2-3 spit) */
@@ -522,10 +585,11 @@
       { l: 0, r: 0, sep: 3.6, mr: 3.1, my: 4.4, ball: 0 },
       { l: -1, r: 0, sep: 3.6, mr: 3.5, my: 4.8, ball: 0 },
       { l: 0, r: 0, sep: 3.2, mr: 4.0, my: 5.2, ball: 2.4 },
-      { l: -1, r: -1, sep: 3.9, mr: 4.4, my: 5.6, ball: 0 }];
+      { l: -1, r: -1, sep: 3.9, mr: 4.4, my: 5.6, ball: 0 },
+      { l: 0, r: 0, sep: 4.3, mr: 4.0, my: 5.4, ball: 3, rx: 6.8, ry: 6.9 }];     // frame 4 = WIND-UP (cheeks puffed, hairball swelling)
     var fr = P.map(function (p, f) {
       return butt({
-        w: 24, h: 20, seed: 45, cx: 12, cw: 2, cy: 10.6, rx: 6.3, ry: 6.3, sep: p.sep,
+        w: 24, h: 20, seed: 45, cx: 12, cw: 2, cy: 10.6, rx: p.rx || 6.3, ry: p.ry || 6.3, sep: p.sep,
         lDy: p.l, rDy: p.r, hair: 0.5, hairLong: 0.5, fur: 10, tuft: 3, tuftLen: 3, spot: 0.06,
         mouth: {
           dy: 0.8, rx: p.mr, ry: p.my, ball: p.ball || 0,
@@ -534,7 +598,7 @@
         }
       });
     });
-    def('butt_spitter', 24, 20, fr);
+    def('butt_spitter', 24, 20, fr, { p: '#c4d25a', l: '#e8f48c', L: '#fbffd0', d: '#869c34', D: '#566a26' });   // bloated, sickly
   })();
 
   /* ---- butt_charger 20x16 : a horizontal butt (mouth at the nose, left) with a rocket strapped on */
@@ -638,7 +702,7 @@
       }
       fr.push(g);
     }
-    def('alien_squid', 20, 24, fr, { a: '#c9a4ff', b: '#8250e0', c: '#5a32a8' });
+    def('alien_squid', 20, 24, fr, { a: '#a8fff0', b: '#22c0a4', c: '#0e7a7c' });
   })();
 
   /* ================================================================= BOSS == */
