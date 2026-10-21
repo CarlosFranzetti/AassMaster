@@ -459,8 +459,8 @@ function respawnPlayer() {
 }
 function updateRecov() {
   for (var i = recovQ.length - 1; i >= 0; i--) {
-    if (tick >= recovQ[i].at) {
-      if (mode === 'playing' && P.alive) spawnPU(recovQ[i].name, W + 8, clamp(P.y, CEIL + 4, FLOOR - 16));
+    if (tick >= recovQ[i].at && P.alive) {          // wait for the respawn, then drop
+      spawnPU(recovQ[i].name, W + 8, clamp(P.y, CEIL + 4, FLOOR - 16));
       recovQ.splice(i, 1);
     }
   }

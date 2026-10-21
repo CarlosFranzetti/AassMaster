@@ -380,8 +380,10 @@ function drawWorld(V) {
   var enemies = V.enemies, ebul = V.ebul, bullets = V.bullets, powerups = V.powerups, parts = V.parts;
   /* ---- lunge lane telegraph ---- */
   if (V.lane.on) {
-    ctx.fillStyle = ((tick >> 2) & 1) ? 'rgba(255,40,40,0.28)' : 'rgba(255,40,40,0.14)';
-    ctx.fillRect(0, Math.round(V.lane.y), W, Math.round(V.lane.h));
+    var ly0 = Math.round(V.lane.y), lh0 = Math.round(V.lane.h);
+    ctx.fillStyle = ((tick >> 2) & 1) ? 'rgba(255,40,40,0.42)' : 'rgba(255,40,40,0.24)';
+    ctx.fillRect(0, ly0, W, lh0);
+    ctx.fillStyle = 'rgba(255,220,220,0.8)'; ctx.fillRect(0, ly0, W, 1); ctx.fillRect(0, ly0 + lh0 - 1, W, 1);
   }
   /* ---- shadows (enemy shadows are dropped when the screen is crowded: keeps the draw-call budget) ---- */
   var crowd = 0;
