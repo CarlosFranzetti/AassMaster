@@ -244,17 +244,17 @@ function bakeStrip(name) {
   return { c: c, w: z.w, h: z.h };
 }
 function bakeStars() {
-  var layers = [0, 1, 2], l, i;
+  var l, i, v;
   for (l = 0; l < 3; l++) {
     var n = l === 0 ? 40 : (l === 1 ? 26 : 16);
     var variants = l === 2 ? 2 : 1;
-    for (var v = 0; v < variants; v++) {
-      var c = mkCanvas(W, H), g = c.getContext('2d');
+    for (v = 0; v < variants; v++) {
+      var c = mkCanvas(W * 2, H), g = c.getContext('2d');
       var save = fxSeed; fxSeed = 777 + l * 31; // stable layout per layer, identical across variants
       for (i = 0; i < n; i++) {
         var x = (rf() * W) | 0, y = (CEIL + 2 + rf() * 130) | 0, dim = (v === 1 && i % 5 === 0);
         g.fillStyle = dim ? '#2c3460' : (l === 0 ? '#56649c' : (l === 1 ? '#9aa8d8' : '#ffffff'));
-        g.fillRect(x, y, l === 2 ? 2 : 1, 1);
+        g.fillRect(x, y, l === 2 ? 2 : 1, 1); g.fillRect(x + W, y, l === 2 ? 2 : 1, 1);   // duplicated so one blit wraps
       }
       fxSeed = save;
       starCv[l === 2 ? 2 + v : l] = c;
@@ -329,15 +329,13 @@ function drawBackdrop(V) {
   for (i = 0; i < 3; i++) {
     var cvs = starCv[i === 2 ? 2 + (((V.tick >> 4) & 1)) : i];
     if (!cvs) continue;
-    var o = Math.floor(starPos[i]) % W;
-    ctx.drawImage(cvs, -o, 0);
-    ctx.drawImage(cvs, W - o, 0);
+    ctx.drawImage(cvs, -(Math.floor(starPos[i]) % W), 0);
   }
   var far = strips.far, y0 = 126;
   if (far) {
     if (heatAmp <= 0.01) stripBlit(far, scrollFar, y0);
     else {
-      var base = Math.floor(scrollFar), T = V.tick * heatOmega, bandH = 3;
+      var base = Math.floor(scrollFar), T = V.tick * heatOmega, bandH = 8;
       for (i = 0; i < far.h; i += bandH) {
         var dx = Math.round(Math.sin((y0 + i) * 0.15 + T) * heatAmp);
         var off = (((base + dx) % far.w) + far.w) % far.w;
@@ -361,7 +359,7 @@ function enemyFrame(e) {
       f = e.spit > 0 ? 2 + ((e.spit >> 3) & 1) : (e.windup > 0 && nf > 4 ? 4 : ((e.t >> 4) & 1));
       break;
     case 'armored': f = e.hp > e.maxhp * 0.66 ? 0 : (e.hp > e.maxhp * 0.33 ? 1 : 2); break;
-    case 'turret': f = e.windup > 0 ? 1 : (e.burstN > 0 ? 2 : 0); break;
+    case 'turret': f = e.windup > 0 ? 1 : (e.spit > 0 ? 2 : 0); break;
     default: f = (e.t >> 3) % nf;
   }
   return f >= nf ? nf - 1 : (f < 0 ? 0 : f);
@@ -375,17 +373,28 @@ function drawBoss(b) {
   if (fr >= nf) fr = nf - 1;
   S(nm, b.x + b.jx, b.y, fr, false, flashing);
 }
+var sparkCols = [];
+function sparkIndex(c) { var k = sparkCols.indexOf(c); if (k < 0) { sparkCols.push(c); k = sparkCols.length - 1; } return k; }
 function drawWorld(V) {
   var i, e, b, p, f, P = V.P, F = V.F, B = V.B, M = V.M, tick = V.tick;
   var enemies = V.enemies, ebul = V.ebul, bullets = V.bullets, powerups = V.powerups, parts = V.parts;
-  /* ---- shadows ---- */
+  /* ---- lunge lane telegraph ---- */
+  if (V.lane.on) {
+    ctx.fillStyle = ((tick >> 2) & 1) ? 'rgba(255,40,40,0.28)' : 'rgba(255,40,40,0.14)';
+    ctx.fillRect(0, Math.round(V.lane.y), W, Math.round(V.lane.h));
+  }
+  /* ---- shadows (enemy shadows are dropped when the screen is crowded: keeps the draw-call budget) ---- */
+  var crowd = 0;
+  for (i = 0; i < enemies.length; i++) if (enemies[i].on) crowd++;
+  for (i = 0; i < ebul.length; i++) if (ebul[i].on) crowd++;
+  for (i = 0; i < bullets.length; i++) if (bullets[i].on) crowd++;
+  var enemyShadows = crowd < 46, lod = crowd >= 40;
   if (P.alive && !P.swallowed) shadow('player', 0, P.x, P.y, 24, 16);
   if (F.on) shadow('force', 0, F.x, F.y, 16, 16);
-  for (i = 0; i < enemies.length; i++) {
+  for (i = 0; enemyShadows && i < enemies.length; i++) {
     e = enemies[i];
-    if (e.on && e.x < W && e.x > -e.sw && e.beh !== 'turret') shadow(e.spr, 0, e.x, e.y, e.sw, e.sh);
+    if (e.on && e.x < W && e.x > -e.sw && e.y < FLOOR && e.y + e.sh > 92 && e.beh !== 'turret') shadow(e.spr, 0, e.x, e.y, e.sw, e.sh);
   }
-  for (i = 0; i < powerups.length; i++) { p = powerups[i]; if (p.on) shadow(p.name, 0, p.x, p.y, 12, 12); }
   if (B.on) shadow(B.name, 0, B.x + B.jx, B.y, B.w, B.h, 0.15);
   if (M.on) shadow(M.name, 0, M.x + M.jx, M.y, M.w, M.h, 0.25);
   /* ---- powerups, enemies, bosses ---- */
@@ -395,9 +404,9 @@ function drawWorld(V) {
   }
   for (i = 0; i < enemies.length; i++) {
     e = enemies[i];
-    if (!e.on) continue;
+    if (!e.on || e.x >= W || e.x + e.sw <= 0 || e.y >= H || e.y + e.sh <= 0) continue;
     var fl = e.flash > 0 || (e.carrier && (tick & 15) < 3);
-    S(e.spr, e.x, e.y, enemyFrame(e), e.flipX, fl);
+    S(e.spr, e.x, e.y, enemyFrame(e), e.flipX, fl, e.ceil);
   }
   if (B.on) drawBoss(B);
   if (M.on) drawBoss(M);
@@ -409,13 +418,13 @@ function drawWorld(V) {
   /* ---- enemy bullets ---- */
   for (i = 0; i < ebul.length; i++) {
     b = ebul[i];
-    if (!b.on) continue;
+    if (!b.on || b.x >= W || b.x + b.w <= 0) continue;
     S(b.kind ? 'hair_ball' : 'enemy_bullet', b.x, b.y, (b.t >> 2) & 1);
   }
   /* ---- player bullets / beams / laser ---- */
   for (i = 0; i < bullets.length; i++) {
     b = bullets[i];
-    if (!b.on) continue;
+    if (!b.on || b.x >= W || b.x + b.w <= 0) continue;
     switch (b.kind) {
       case 4: S('beam_t' + b.tier, b.x, b.y, (b.t >> 2) & 1); break;
       case 1: S('bullet_opt', b.x, b.y + 0, 0); break;
@@ -449,22 +458,33 @@ function drawWorld(V) {
       S('charge_orb', P.x + mx - 4, P.y + my - 8, of);
     }
   }
-  /* ---- particles ---- */
+  /* ---- particles (sparks are batched into one fill per colour) ---- */
+  var ci, any;
   for (i = 0; i < parts.length; i++) {
     p = parts[i];
     if (!p.on) continue;
-    if (p.kind === 0) {
-      if (p.life < 8) ctx.globalAlpha = p.life / 8;
-      ctx.fillStyle = p.c; ctx.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s);
-      ctx.globalAlpha = 1;
-    } else if (p.kind === 1) {
+    if (p.kind === 0) { if (p.cc !== p.c) { p.cc = p.c; p.ci = sparkIndex(p.c); } }
+    else if (p.kind === 1) {
+      if (lod && (p.spr === 'bullet_hit' || p.spr === 'muzzle')) continue;
       f = Math.min(p.nf - 1, Math.floor((1 - p.life / p.max) * p.nf));
       S(p.spr, p.x, p.y, f);
     } else {
+      if (lod) continue;
       if (p.life < 10) ctx.globalAlpha = p.life / 10;
       S(p.spr, p.x, p.y, ((p.life >> 3) + i) % p.nf);
       ctx.globalAlpha = 1;
     }
+  }
+  for (ci = 0; ci < sparkCols.length; ci++) {
+    any = false;
+    for (i = 0; i < parts.length; i++) {
+      p = parts[i];
+      if (p.on && p.kind === 0 && p.ci === ci) {
+        if (!any) { ctx.fillStyle = sparkCols[ci]; ctx.beginPath(); any = true; }
+        ctx.rect(Math.round(p.x), Math.round(p.y), p.s, p.s);
+      }
+    }
+    if (any) ctx.fill();
   }
   /* ---- foreground layer (in front of entities, bottom edge only) ---- */
   if (strips.fore) stripBlit(strips.fore, scrollNear * 1.5, H - strips.fore.h);
@@ -491,32 +511,58 @@ function drawTitleScene(V) {
 }
 
 /* ---------------------------------------------------------------- HUD */
-var BTN = { pause: { x: W - 24, y: 0, w: 24, h: 22 }, mute: { x: W - 48, y: 0, w: 24, h: 22 }, haptics: { x: W / 2 - 62, y: 150, w: 124, h: 18 } };
+var BTN = { bomb: { x: W - 38, y: H - 42, w: 34, h: 30 }, pause: { x: W - 24, y: 0, w: 24, h: 22 }, mute: { x: W - 48, y: 0, w: 24, h: 22 }, haptics: { x: W / 2 - 62, y: 150, w: 124, h: 18 } };
 var WEAPON_ICON = { main: 'pu_power', spread: 'pu_spread', laser: 'pu_laser', wave: 'pu_wave' };
+var hudTop = null, hudBot = null;
+var hkT = { s: null, h: null, l: -1, m: null }, hkB = { w: null, p: -1, f: -1, sh: null };
 function drawHUD(V) {
   var i, y;
-  T('SCORE ' + V.score, 4, 3, '#ffffff', 1, 'outline');
-  var hs = 'HI ' + V.hiStr;
-  T(hs, Math.round((W - TW(hs, 1)) / 2), 3, '#ffe14a', 1, 'outline');
-  var n = Math.min(V.lives, 5), lw = size('icon_life').w + 1;
-  for (i = 0; i < n; i++) S('icon_life', W - 52 - (i + 1) * lw, 5);
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(W - 14, 4, 2, 8); ctx.fillRect(W - 10, 4, 2, 8);
-  T('M', W - 38, 4, V.muted ? '#ff5050' : '#cccccc', 1, 'outline');
-  // chain
+  if (!hudTop) { hudTop = mkCanvas(W, 24); hudBot = mkCanvas(64, 16); }
+  /* top bar + bottom-left status are baked into small canvases and only re-rendered when a value changes */
+  if (hkT.s !== V.score || hkT.h !== V.hiStr || hkT.l !== V.lives || hkT.m !== V.muted) {
+    hkT.s = V.score; hkT.h = V.hiStr; hkT.l = V.lives; hkT.m = V.muted;
+    var gt = hudTop.getContext('2d'), save = ctx;
+    gt.clearRect(0, 0, W, 24); gt.imageSmoothingEnabled = false; ctx = gt;
+    T('SCORE ' + V.score, 4, 3, '#ffffff', 1, 'outline');
+    var hs = 'HI ' + V.hiStr;
+    T(hs, Math.round((W - TW(hs, 1)) / 2), 3, '#ffe14a', 1, 'outline');
+    var n = Math.min(V.lives, 5), lw = size('icon_life').w + 1;
+    for (i = 0; i < n; i++) S('icon_life', W - 52 - (i + 1) * lw, 5);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(W - 14, 4, 2, 8); ctx.fillRect(W - 10, 4, 2, 8);
+    T('M', W - 38, 4, V.muted ? '#ff5050' : '#cccccc', 1, 'outline');
+    ctx = save;
+  }
+  ctx.drawImage(hudTop, 0, 0);
+  // chain (live)
   if (V.chain >= 2 && V.chainT > 0) {
-    var cs = 'CHAIN ' + V.chain + ' X' + V.mult;
-    T(cs, 4, 15, ((V.tick >> 2) & 1) ? '#ffe14a' : '#ff9a2a', 1, 'outline');
+    T('CHAIN ' + V.chain + ' X' + V.mult, 4, 15, ((V.tick >> 2) & 1) ? '#ffe14a' : '#ff9a2a', 1, 'outline');
     ctx.fillStyle = '#000'; ctx.fillRect(4, 25, 52, 3);
     ctx.fillStyle = '#ffe14a'; ctx.fillRect(5, 26, Math.round(50 * clamp(V.chainT / 150, 0, 1)), 1);
   }
-  // weapon / force / speed status, bottom-left
-  y = H - 15;
-  S(WEAPON_ICON[V.weaponName] || 'pu_power', 4, y, (V.tick >> 4) & 1);
-  for (i = 0; i < 3; i++) { ctx.fillStyle = i < V.power ? '#ffe14a' : '#3a2a50'; ctx.fillRect(18 + i * 4, y + 3, 3, 6); }
-  if (V.forceLv > 0) {
-    T('F' + V.forceLv, 34, y + 3, '#ffa040', 1, 'outline');
+  // weapon / force / shield status, bottom-left
+  if (hkB.w !== V.weaponName || hkB.p !== V.power || hkB.f !== V.forceLv || hkB.sh !== V.shieldOn) {
+    hkB.w = V.weaponName; hkB.p = V.power; hkB.f = V.forceLv; hkB.sh = V.shieldOn;
+    var gb = hudBot.getContext('2d'), sv = ctx;
+    gb.clearRect(0, 0, 64, 16); gb.imageSmoothingEnabled = false; ctx = gb;
+    S(WEAPON_ICON[V.weaponName] || 'pu_power', 0, 0, 0);
+    for (i = 0; i < 3; i++) { ctx.fillStyle = i < V.power ? '#ffe14a' : '#3a2a50'; ctx.fillRect(14 + i * 4, 3, 3, 6); }
+    if (V.forceLv > 0) T('F' + V.forceLv, 30, 3, '#ffa040', 1, 'outline');
+    if (V.shieldOn) T('B', 44, 3, '#6ab4ff', 1, 'outline');
+    ctx = sv;
   }
-  if (V.shieldOn) T('B', 48, y + 3, '#6ab4ff', 1, 'outline');
+  ctx.drawImage(hudBot, 4, H - 15);
+  // bomb meter + button (bottom-right)
+  if (V.mode === 'playing') {
+    if (V.bombReady) {
+      var bn = BTN.bomb, pulse = ((V.tick >> 3) & 1);
+      ctx.fillStyle = pulse ? 'rgba(120,255,120,0.55)' : 'rgba(40,160,60,0.45)'; ctx.fillRect(bn.x, bn.y, bn.w, bn.h);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(bn.x, bn.y, bn.w, 1); ctx.fillRect(bn.x, bn.y + bn.h - 1, bn.w, 1); ctx.fillRect(bn.x, bn.y, 1, bn.h); ctx.fillRect(bn.x + bn.w - 1, bn.y, 1, bn.h);
+      T('BLAST', bn.x + 3, bn.y + 11, '#ffffff', 1, 'outline');
+    } else if (V.bombPct > 0.01) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(W - 44, H - 8, 40, 4);
+      ctx.fillStyle = '#7dff7d'; ctx.fillRect(W - 43, H - 7, Math.round(38 * V.bombPct), 2);
+    }
+  }
   // boss bars
   var bb = V.B.on ? V.B : (V.M.on ? V.M : null);
   if (bb) {
@@ -590,8 +636,9 @@ function drawTitleUI(V) {
   } else TC('AASSSMASTER', ly + 10, '#ff5fa2', 3, 'banner');
   TC('HI-SCORE ' + V.hiStr, 96, '#ffe14a', 1, 'outline');
   TC('TAP TO START', 114, ((V.titleT >> 4) & 1) ? '#ffffff' : '#ff5fa2', 2, 'banner');
-  TC('LEFT: DRAG MOVE - TAP FORCE   RIGHT: HOLD FIRE - HOLD LONGER: BEAM', 184, '#cfd6ff', 1, 'outline');
-  TC('KEYS: ARROWS - Z FIRE - X CHARGE - C FORCE - P PAUSE - M MUTE - V HAPTICS', 195, '#8a93c8', 1, 'outline');
+  TC('LEFT THUMB: DRAG TO MOVE - TAP TO THROW FORCE', 170, '#cfd6ff', 1, 'outline');
+  TC('RIGHT THUMB: HOLD TO FIRE - HOLD LONGER FOR BEAM', 181, '#cfd6ff', 1, 'outline');
+  TC('KEYS: ARROWS - Z FIRE - X BEAM - C FORCE - P PAUSE - M MUTE', 195, '#8a93c8', 1, 'outline');
 }
 function drawGameOverUI(V) {
   ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 50, W, 110);
