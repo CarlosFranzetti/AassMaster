@@ -1,68 +1,54 @@
-# aasssMaster — Product Requirements
+# Product requirements: aasssMaster
 
-Status: v2 shipped and tagged `v2`. Last reviewed against the code on the `v2` tag.
+Status: written from the code as it stands on `claude/song-synths-sequencer-processors-e79zyb`, 2026-10-23. Where a
+requirement describes what the code already does, it says so. Anything not built yet lives in `future.md`.
 
-## 1. Summary
-aasssMaster is a pixel-art horizontal shoot-'em-up in the spirit of R-Type. It is built for
-landscape touchscreens first, with keyboard support. The comedy is the premise: the enemies are
-hairy butt-aliens, and they try to swallow your ship. The game has three stages, each ending in a
-giant boss, and a loop that makes the second pass harder.
+## 1. Purpose
 
-## 2. Goals
-- Playable on a phone in landscape with one thumb on movement and one on fire.
-- Feels like a shmup, not a demo: distinct enemies, a boss with a readable weak point, power-up choices.
-- Funny on purpose. Art, sound and boss attacks carry the joke without getting crude.
-- Zero install and zero assets: open the page and play. Everything is generated in code.
+aasssMaster is a vertical shoot-'em-up played in the browser, with a hairy-butt alien theme. All art and sound are
+generated in code.
 
-## 3. Users
-- **Phone players** on a short break. Sessions of a few minutes, restarts are frequent, checkpoints matter.
-- **Desktop players** who want the keyboard controls.
-- **Hackers and tinkerers** who read the source, change `levels.js`, and reload. The data-driven design is for them.
+## 2. Users
 
-## 4. Platform constraints
-- Browsers with Pointer Events, Canvas 2D and Web Audio. No WebGL.
-- Internal resolution 384x216, scaled to the screen with pixelated rendering.
-- Portrait shows a "rotate your device" overlay and auto-pauses.
-- Audio starts only after a user gesture. The game calls `SFX.init()` on the first tap or key.
-- No external network requests. No images, audio files or fonts are loaded.
+- **Players** open `index.html` on a phone or desktop and play a three-stage run.
+- **Developers and coding agents** change the level data in `js/levels.js` and reload. They need no toolchain.
 
-## 5. Requirements and status
+## 3. Constraints
+
+- **C1. No build step, no package manager, no external assets.** Plain JS globals loaded by `<script>` tags. Every sprite, sound and impulse response is generated at runtime.
+- **C2. No network at runtime.** The game fetches nothing after load.
+- **C3. Runs from a static HTTP server.** The README says to use `python3 -m http.server`.
+- **C4. Silent until a gesture.** Web Audio starts only after a user tap or key press.
+- **C5. Never throws on missing pieces.** A missing sprite draws a magenta box (per CONTRACT.md); a missing track falls back with one console warning.
+
+## 4. Game requirements
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| R1 | Touch: drag left side to move relative to the finger | Shipped |
-| R2 | Touch: hold right side to autofire; keep holding for a charged beam (first tier at 0.5 s) | Shipped |
-| R3 | Keyboard controls (arrows/WASD, Z, X, C, P, M, B, V) | Shipped |
-| R4 | Force pod: throw and recall, front and rear attach, levels 1–3 | Shipped |
-| R5 | Three weapons (spread, laser, wave) that keep power level on switch | Shipped |
-| R6 | Charge rework: three beam tiers, fire rate drops while charging | Shipped |
-| R7 | Boss with a mouth weak point, three attack families, shield turns swallow into spit-out | Shipped |
-| R8 | Mid-bosses in stages 2 and 3 that freeze the stage clock | Shipped |
-| R9 | Chain and graze scoring, hidden rank, recovery drops after death | Shipped |
-| R10 | Checkpoints and three continues | Shipped |
-| R11 | Formations (spacing 0 spawns one tick), entries from left, top and bottom | Shipped |
-| R12 | Three stage themes with parallax layers | Shipped |
-| R13 | Layered music per stage, boss phase layers, danger heartbeat, pause keeps position | Shipped (not heard by the authors; see memory.md) |
-| R14 | Haptics on hits and death, toggle with V, saved | Shipped |
-| R15 | Bomb ("BLAST") meter filled by score, clears enemy shots | Shipped |
-| R16 | Fourth stage with its own theme and boss | Not built (data and art partly exist; see future.md) |
-| R17 | Difficulty select on the title screen | Not built |
-| R18 | Volume menu | Not built |
-| R19 | Terrain (height arrays, tunnels) | Cut by director ruling |
+| G1 | Fixed 384×216 logical canvas, scaled to the screen with pixelated rendering. | Built |
+| G2 | Three stages (HAIRY NEBULA, THE CRACK OF DOOM, RECTUM OF THE GODS) with a boss at the end of each. | Built |
+| G3 | Stages 2 and 3 have a mid-boss (at 40 s and 45 s). Stage 1 has none. | Built |
+| G4 | Ten regular enemy types, one mid-boss, three bosses, all defined as data in `js/levels.js`. | Built |
+| G5 | Keyboard controls (arrows or WASD to move, Z/Space/Ctrl to fire, X to charge a beam, C/Shift for Force, B for bomb, P/Esc to pause, M to mute, V for haptics). | Built |
+| G6 | Touch controls: drag on the left side to move, tap to throw Force, hold on the right side to fire, hold longer for the beam. | Built |
+| G7 | Power-ups (power, speed, shield, option), a Force pod, lives, continues and a hi-score. | Built |
+| G8 | After the third stage the run loops with scaled boss HP and loop modifiers or mutators. | Built |
+| G9 | Music per stage and per boss, sound effects, all synthesised. | Built |
+| G10 | The engine boots with zero console errors when every module is present, and keeps running when a sprite or sound is missing (CONTRACT.md C7). | Built, checked by hand |
+| G11 | `Levels.validate()` reports unknown names, budget overruns and quiet gaps as warnings at load. | Built |
+| G12 | A committed automated test that drives a headless run of the game. | **Not built** (CONTRACT.md C8 describes one) |
 
-## 6. Non-goals
-- Accounts, leaderboards, a server, or any backend.
-- A level editor UI. Levels are edited as data in `levels.js`.
-- Replay recording. Rejected in round 2 as costly for the value.
-- Rendering with external art or audio files.
+## 5. Acceptance criteria
 
-## 7. Success criteria
-- Engine stays at the 60 Hz simulation rate on desktop Chromium in headless tests: met (about 61 fps in the smoke run).
-- Zero page or console errors across the headless suites at 960x540 and 844x390: met on the last run.
-- `Levels.validate()` returns zero errors: met (one warning, see memory.md).
-- A real phone player finishes stage 1 without a bug report: **not measured.** No playtest has been done.
+- Opening `/` and pressing Space starts the stage with no page errors in the browser console.
+- `Levels.validate()` returns no errors at load.
 
-## 8. Open questions
-- Does the mix work on phone speakers? Nobody has listened to the audio; the authors reasoned it from the code.
-- Is a three-stage game long enough? Stage times are 60, 70 and 80 seconds. Loop 2 is the only long-run content.
-- Should the loop mutators grow beyond `swarm` and `fast`? Only those two exist in the data.
+## 6. Out of scope
+
+- Saving scores to a server, leaderboards, and accounts.
+- Multiplayer.
+- Any server-side component.
+
+## 7. Open questions
+
+- Stage 1 has no mid-boss while stages 2 and 3 do. Is that intended?
